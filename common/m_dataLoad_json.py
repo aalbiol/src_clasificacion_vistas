@@ -42,12 +42,12 @@ def extract_one_hot(d,tipos_defecto):
         else:
             v.append(math.nan)
     return torch.tensor(v)
-import torch.nn.functional as F
-def split_train_val(lista,p):
-    n1=int(len(lista)*p)
-    train=lista[:n1]
-    val=lista[n1:]
-    return train,val
+
+# def split_train_val(lista,p):
+#     n1=int(len(lista)*p)
+#     train=lista[:n1]
+#     val=lista[n1:]
+#     return train,val
 
 def lee_png16(filename,max_value):
     #print(f'Reading {filename}...')
@@ -70,10 +70,13 @@ def lee_vista(images_folder,view_id,terminaciones,max_value,carga_mask=True):
     nombre_base=os.path.join(images_folder,view_id)
     canales=[]
 
-    if  type(max_value) is list:
-        max_values=max_value
+    assert isinstance(max_value,list), 'maxvalue tiene que ser una lista de tantos elementos como canales o una lista con un unico elemento que se emplea para todos los canales'
+   
+    if len(max_value) == len(terminaciones):
+            max_values=max_value
     else:
-        max_values= [max_value]*len(terminaciones)
+        assert len(max_value)==1, "Es una lista que no tiene ni un solo elemento ni un numero de elementos igual al numero de canales"
+        max_values= max_value*len(terminaciones)
 
     for k,t in enumerate(terminaciones):
         nombre=nombre_base+t
@@ -129,22 +132,42 @@ def add_good_category(onehot):
 
 def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, prob_train=0.7,crop_size=(120,120),defect_types=None,splitname_delimiter='-',
                                multilabel=True, in_memory=True, carga_mask=False):
+    '''
+    dataplaces: lista de tuplas 
+      Si la tupla tiene dos elementos, el primero es el directorio de jsons y el segundo el de imágenes La lista de jsons se obtiene con glob
+      Si la tupla tiene 3 elementos, el primero es la lista de jsons, el segundo el directorio de jsons, y el tercero el directorio de imágenes
+    '''
     assert sufijos is not None
 
     assert sufijos is not None
     json_files=[]
     imags_directorio=[]
-    for place in dataplaces:
-        anotaciones = place[0]
-        imagenes=place[1]
-        anot_folder=os.path.join(root,anotaciones)
-        imags_folder=os.path.join(root,imagenes)
-        fichs=glob.glob('*.json',root_dir=anot_folder)
-        ficheros=[os.path.join(anot_folder,f) for f in fichs]
-        
-        json_files +=ficheros#FullPath
-        imagenes= [imags_folder]*len(fichs)
-        imags_directorio += imagenes
+    for place in dataplaces: # Si el dataplace tiene dos elementos (jsons)
+        if len(place)==2:
+            anotaciones = place[0]
+            imagenes=place[1]
+            anot_folder=os.path.join(root,anotaciones)
+            imags_folder=os.path.join(root,imagenes)
+            fichs=glob.glob('*.json',root_dir=anot_folder)
+            ficheros=[os.path.join(anot_folder,f) for f in fichs]
+            
+
+        if len(place)==3:
+            lista_filename=place[0]
+            anotaciones = place[1]
+            imagenes=place[2]
+            anot_folder=os.path.join(root,anotaciones)
+            imags_folder=os.path.join(root,imagenes)
+            lista_filename=os.path.join(anot_folder,lista_filename)
+            #Leer lista_filename
+            with open(lista_filename) as f:
+                fichs = f.readlines()
+            fichs=[f.strip() for f in fichs]
+            ficheros=[os.path.join(anot_folder,f) for f in fichs]
+ 
+        json_files +=ficheros
+        imagenes= [imags_folder]*len(ficheros)
+        imags_directorio +=imagenes
 
 
     if defect_types is None:
