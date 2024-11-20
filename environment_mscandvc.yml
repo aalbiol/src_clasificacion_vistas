@@ -1,0 +1,29 @@
+name: mscandvc
+channels:
+  - conda-forge
+dependencies:
+  - python==3.12
+  - pip
+  - pip:
+    - numpy
+    - ipython  
+    - jupyter
+    - pandas
+    - matplotlib
+    - scikit-learn
+    - scikit-image
+    - torch          
+    - torch-summary
+    - torchvision
+    - torchmetrics    
+    - datasets
+    - pytorch-lightning
+    - torchmetrics
+    - jsonargparse
+    - opencv-python
+    - attrdict
+    - onnx    
+    - wandb
+    - pillow
+    - dvc
+    - dvc_gdrive
