@@ -27,3 +27,4 @@ dependencies:
     - pillow
     - dvc
     - dvc_gdrive
+    - dvc_webdav
