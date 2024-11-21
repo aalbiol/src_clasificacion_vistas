@@ -23,40 +23,7 @@ from transformaciones import Aumentador_Imagenes
 
 import m_dataLoad_json
 
-class FileNamesDataSet(Dataset):
-    '''
-    Clase para suministrar archivos de una lista cuando no hay anotacion
-    Solo se devuelve la imagen y el fruitid y el viewid.
-    Por compatibilidad se devuelve un target = None
-    '''
-    def __init__(self,root_folder=None, filenames_list=None ,transform=None, 
-                 field_delimiter='-',max_value = 255, *args, **kwargs):
-        super().__init__(*args,  **kwargs)
-        
-        self.root_folder=root_folder
-        self.filenames_list=list(filenames_list)
-        self.transform = transform
-        self.field_delimiter=field_delimiter
-        self.max_value = max_value
-        
-              
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:              
-        view_id=m_dataLoad_json.view_id(self.filenames_list[index])
-        fruit_id=m_dataLoad_json.fruit_id(self.filenames_list[index],delimiter=self.field_delimiter)
-        
-        img_fullname=(self.filenames_list[index] if self.root_folder is None else os.path.join(self.root_folder,self.filenames_list[index]))
-        imagen= m_dataLoad_json.lee_png16(img_fullname,self.max_value)
-           
-        if self.transform is not None:                
-            imagen2 = self.transform(imagen)
-        else:
-            imagen2=imagen
-        target=None     # Este data set no está etiquetado               
-        return imagen2, target, view_id,fruit_id 
-              
-    def __len__(self) -> int:
-        return len(self.filenames_list)
- 
+from dataset import ViewsDataSet, FileNamesDataSet
  
 
 
@@ -72,55 +39,14 @@ def matriz_etiquetas(dataset):
     return matriz
         
     
-    
-# Esto es el data set    
-class OliveViewsDataSet(Dataset):
-    def __init__(self,dataset=None ,transform=None, carga_mask=False, *args, **kwargs):
-        super().__init__(*args,  **kwargs)
-        
-        self.dataset=dataset   
-        self.transform = transform
-        self.carga_mask = carga_mask
-        
-              
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:
-        caso=self.dataset[index]
-        
-        target =caso['labels'].float()
-        view_id=caso['view_id']
-        fruit_id=caso['fruit_id']
-        
-        
-        if caso['image'] is None: #Cuando no está en memoria
-            imags_folder=caso['imag_folder']
-            sufijos=caso['sufijos']
-            max_value=caso['max_value']
-            crop_size=caso['crop_size']
-            #print("Reading ", view_id)
-            imagen=m_dataLoad_json.lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=self.carga_mask)
-        else:
-            #print("Imagen ya disponible:" , view_id)
-            imagen=caso['image']
-                       
-        if self.transform is not None:                
-            imagen2 = self.transform(imagen)
-        else:
-            imagen2=imagen
-                           
-        return imagen2,target,view_id,fruit_id # imagen, lista_de_etiquetas, (ruta_al_archivo, vista_id) 
-       
-    def __len__(self) -> int:
-        return len(self.dataset)
-    
 
-def matriz_etiquetas(dataset):
-    lista=[]
-    for caso in dataset:
-        labels=caso['labels']
-        lista.append(labels)
-    matriz=torch.stack(lista)
-
-    return matriz
+# def matriz_etiquetas(dataset):
+#     lista=[]
+#     for caso in dataset:
+#         labels=caso['labels']
+#         lista.append(labels)
+#     matriz=torch.stack(lista)
+#     return matriz
 
 def view_ids(dataset):
     lista=[]
@@ -179,7 +105,7 @@ class ViewDataModule(pl.LightningDataModule):
                  carga_mask=True,
                  multilabel=True,
                  in_memory=True,
-
+                 augmentation=None,
                  **kwargs):
         '''
         self.train_set_categories es una lista de nombres de ficheros
@@ -224,6 +150,7 @@ class ViewDataModule(pl.LightningDataModule):
         self.delimiter=delimiter
         self.crop_size=crop_size
         self.carga_mask=carga_mask
+        self.augmentation=augmentation
         
         if train_dataplaces is not None:
             self.trainset,_,self.tipos_defecto=m_dataLoad_json.genera_ds_jsons_multilabel(training_path,
@@ -258,44 +185,61 @@ class ViewDataModule(pl.LightningDataModule):
             self.val_dataset = None
         
         if self.medias_norm is None or self.stds_norm is None:
+            print("Calculando parametros de normalizacion...")
             self.medias_norm, self.stds_norm=m_dataLoad_json.calcula_media_y_stds(self.trainset,self.crop_size)
             print('He calculado parametros de normalizacion')
             print(f'Medias: {self.medias_norm}')
             print(f'Stds: {self.stds_norm}')
 
  
-
-        transform_geometry= transforms.Compose([   
-        transforms.RandomHorizontalFlip(0.5),
-        transforms.RandomVerticalFlip(0.5),
-        transforms.RandomRotation(30),
-        transforms.RandomAffine(degrees=0, shear=15, scale=(0.7, 1.1),translate=(0.15,0.15)),
-        ])
-        transform_intensity_rgb= transforms.Compose([
-            transforms.ColorJitter(brightness=(0.8,1.4), hue=0.01,contrast=(0.8,1.55),saturation=0.15)            
+        if self.augmentation is None:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(30),
+            transforms.RandomAffine(degrees=0, shear=15, scale=(0.7, 1.1),translate=(0.15,0.15)),
             ])
-        transform_intensity= transforms.Compose([
-            transforms.ColorJitter(brightness=(0.8,1.4),contrast=(0.8,1.55))            
+            transform_intensity_rgb= transforms.Compose([
+                transforms.ColorJitter(brightness=(0.8,1.4), hue=0.01,contrast=(0.8,1.55),saturation=0.15)            
+                ])
+            transform_intensity= transforms.Compose([
+                transforms.ColorJitter(brightness=(0.8,1.4),contrast=(0.8,1.55))            
+                ])
+            
+        else:
+            augmentation=self.augmentation
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
             ])
+            transform_intensity_rgb= transforms.Compose([
+                transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
+                ])
+            transform_intensity= transforms.Compose([
+                transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
+                ])
+        
         transform_normalize=transforms.Compose([transforms.Normalize(self.medias_norm, self.stds_norm),
-                                                ])
-    
+                                                ])    
         
         transform_train=Aumentador_Imagenes(transform_geometry,
-                                                       transform_intensity_rgb,transform_intensity,transform_normalize)
-
-        self.transform_val = Aumentador_Imagenes(transforms.CenterCrop(self.crop_size),
-                                                       None,None,transform_normalize)
+                                                    transform_intensity_rgb,transform_intensity,transform_normalize)
+        transform_val = Aumentador_Imagenes(transforms.CenterCrop(self.crop_size),
+                                                    None,None,transform_normalize)            
 
 
         if self.trainset is not None:
-            self.train_dataset = OliveViewsDataSet(dataset=self.trainset, transform = transform_train,carga_mask=self.carga_mask)           
-            self.val_dataset = OliveViewsDataSet(dataset=self.valset, transform = self.transform_val,carga_mask=self.carga_mask) 
+            self.train_dataset = ViewsDataSet(dataset=self.trainset, transform = transform_train,carga_mask=self.carga_mask)           
+            self.val_dataset = ViewsDataSet(dataset=self.valset, transform = transform_val,carga_mask=self.carga_mask) 
             
         
         if self.predict_path is not None:
             self.predict_dataset = FileNamesDataSet( root_folder= self.predictions_base_path, filenames_list = self.predictions_filelist, 
-                                                 transform = self.transform_val, field_delimiter=self.delimiter)
+                                                 transform = transform_val, field_delimiter=self.delimiter)
         else:
             self.pred_dataset=None
                  

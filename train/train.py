@@ -18,6 +18,7 @@ current_file_dir = os.path.dirname(os.path.abspath(__file__))
 
 common_folder = os.path.join(current_file_dir, "../common")
 sys.path.append(common_folder)
+sys.path.append(current_file_dir)
 print("PATHS:",sys.path)
 
 # torch and lightning imports
@@ -29,19 +30,14 @@ from pytorch_lightning.callbacks import LearningRateMonitor
 from torch.optim.lr_scheduler import ExponentialLR
 from pytorch_lightning.callbacks import  ModelCheckpoint
 
-#from m_finetuning import FeatureExtractorFreezeUnfreeze
+from m_finetuning import FeatureExtractorFreezeUnfreeze
 
-from dataLoad import ViewDataModule
+from pl_datamodule import ViewDataModule
 
-#from pl_modulo import OliveClassifier
+from pl_modulo import ViewClassifier
 
 
-from m_dataLoad_json import write_list
-
-# Here we define a new class to turn the ResNet model that we want to use as a feature extractor
-# into a pytorch-lightning module so that we can take advantage of lightning's Trainer object.
-# We aim to make it a little more general by allowing users to define the number of prediction classes.
-
+#from m_dataLoad_json import write_list
 
 
 if __name__ == "__main__":
@@ -70,30 +66,6 @@ if __name__ == "__main__":
         device='cpu'
         gpu=0
 
-
-    # training_path = config['root_folder']
-    # print('Config Root Folder:',training_path)
-    # user = os.getenv('USER') or os.getenv('USERNAME')
-
-
-    # print('Training Root Folder:',training_path)
-
-    # suffixes=['_r.png','_g.png','_b.png','_a.png','_nir.png','_nir1.png','_nir2.png','_nir4.png']
-    # num_channels_in=len(suffixes)
-    # max_values=config['max_value']
-    # crop_size=(config['crop_size'],config['crop_size'])
-    
-    
-  
-    # tipos_defecto=config['defect_types']
-
-    # tipos_defecto = [str(d) for d in tipos_defecto]
-
-    # train_dataplaces=config['train_dataplaces']
-    # val_dataplaces=config['val_dataplaces']
-
-    # print('In memory: ', config['in_memory'])
-
     train_dataplaces = config['data']['train']
     val_dataplaces = config['data']['val']
     terminaciones=config['data']['terminaciones']
@@ -106,8 +78,28 @@ if __name__ == "__main__":
     maxvalues=config['data']['maxvalues']
     crop_size=config['data']['crop_size']
     tipos_defecto=config['model']['defect_types']
+    aumentacion=config['train']['augmentation']
 
-    print('Loading images...')
+
+    num_channels_in=config['model']['num_channels_input']
+    model=ViewClassifier(num_channels_in,
+                lr = config['train']['learning_rate'],
+                class_names=tipos_defecto,
+                weight_decay=config['train']['weights_decay'],
+                mixup_alpha=config['train']['mixup_alpha'],
+                label_smoothing=config['train']['label_smoothing'],
+                warmup_iter=config['train']['warmup'],
+                p_dropout=config['train']['p_dropout'])
+    
+            
+    # Continuar entrenamiento a partir de un punto
+    if config['train']['initial_model'] is not None:
+        checkpoint = torch.load(config['initial_model'])
+        model.load_state_dict(checkpoint['state_dict'])
+
+
+    
+    print('Creating DataModule...')
     datamodule = ViewDataModule(
         training_path = root_folder, 
 		 train_dataplaces=train_dataplaces,
@@ -123,12 +115,13 @@ if __name__ == "__main__":
                  crop_size=crop_size,
                  delimiter=delimiter,
                  carga_mask=False, # En clasificación no se cargan las máscaras
-                 in_memory=in_memory)
+                 in_memory=in_memory,
+                 augmentation=aumentacion,
+                 )
     print('... done!')
 
    
 
-    sys.exit()
 
     medias_norm=datamodule.medias_norm.tolist()
     stds_norm=datamodule.stds_norm.tolist()
@@ -139,35 +132,22 @@ if __name__ == "__main__":
 
 
 
-    model=OliveClassifier(num_channels_in,
-                lr = config['learning_rate'],
-                class_names=tipos_defecto,
-                weight_decay=config['weights_decay'],
-                mixup_alpha=config['mixup_alpha'],
-                label_smoothing=config['label_smoothing'],
-                warmup_iter=config['warmup'],
-                p_dropout=config['p_dropout'])
-        
-    # Continuar entrenamiento a partir de un punto
-    if config['initial_model'] is not None:
-        checkpoint = torch.load(config['initial_model'])
-        model.load_state_dict(checkpoint['state_dict'])
-
-
-
     # Instantiate lightning trainer and train model
-    miwandb= WandbLogger(name=config['log_name'], project=config['wandb_project'],config=config)
+    miwandb= WandbLogger(name="prueba_dvc", project='WANDB_DVC',config=config)
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     
    
-    trainer_args = {'max_epochs': config['num_epochs'], 'logger' : miwandb}
+
     
     
-    print('num_epochs:',config['num_epochs'])
+    num_epochs=config['train']['epochs']
+    #trainer_args = {'max_epochs': num_epochs, 'logger' : None}
+    trainer_args = {'max_epochs': num_epochs, 'logger' : miwandb}
+    print('num_epochs:',num_epochs)
     
 
-    callbacks3=[FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['unfreeze_epoch'],initial_denom_lr=2),
+    callbacks3=[FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['train']['unfreeze_epoch'],initial_denom_lr=2),
                 #ModelCheckpoint(monitor='val_loss',dirpath='.',filename='{epoch}-{val_loss:.2f}-{other_metric:.2f}',save_top_k=1),
                 lr_monitor]
     
@@ -176,11 +156,11 @@ if __name__ == "__main__":
       
     trainer.fit(model, datamodule=datamodule)
     
-    os.system('wandb sync --clean')
+    #os.system('wandb sync --clean')
     
     # Save trained model
 
-
+    system.exit()
     model_name=config['model_name']
     save_path = os.path.join(config['save_path'],model_name) if config['save_path'] is not None else  model_name
     trainer.save_checkpoint(save_path)

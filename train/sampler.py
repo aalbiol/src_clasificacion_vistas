@@ -1,8 +1,13 @@
+import sys
+import os
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_file_dir)
+
 
 import torch
 
 
-import dataLoad
+import pl_datamodule
 
 import random
 from torch.utils.data import Dataset, DataLoader
@@ -123,6 +128,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
         self.lengths.append(len(lista))
         
         for k in range(num_clases): 
+            print('Populating class:',k)
             lista= get_class_items(dataset,k)
             self.listas.append(lista)
             self.lengths.append(len(lista))
@@ -156,6 +162,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
                 pos=iteration % self.lengths[count]
                 n+=1
                 yield lista[pos]
+                print('Yield:',lista[pos])
                 # batch.append( lista[pos])
                 # if len(batch)==self.batch_size:
                 #     out=batch

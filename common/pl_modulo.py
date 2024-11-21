@@ -1,3 +1,13 @@
+import os
+import sys
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Define the relative path to the folder you want to add
+
+common_folder = os.path.join(current_file_dir, "../common")
+sys.path.append(common_folder)
+print("PATHS:",sys.path)
+
 
 import warnings
 warnings.filterwarnings('ignore')
@@ -21,7 +31,7 @@ from torch.optim.lr_scheduler import LinearLR
 
 import numpy as np
 
-import mscan_dvc.clasificacion.src_clasificacion_vistas.common.modelos as modelos
+import modelos
 import wandb
 
 torch.set_printoptions(precision=3)
@@ -49,7 +59,7 @@ def mixup_data(x, y, alpha):
    
     return mixed_x, mixed_y
 
-class OliveClassifier(pl.LightningModule):
+class ViewClassifier(pl.LightningModule):
     def __init__(self, num_channels_in,
                 lr=1e-3,
                 class_names=None,
@@ -72,9 +82,6 @@ class OliveClassifier(pl.LightningModule):
         self.warmup_iter=warmup_iter
         self.lr=lr
 
-        
-        
-        #if resnet_version == 50:
         self.modelo=modelos.resnet50(num_channels_in=self.num_channels_in,
                                          num_classes=self.num_classes,
                                          p_dropout=self.p_dropout)               

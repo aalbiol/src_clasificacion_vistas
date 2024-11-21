@@ -1,5 +1,5 @@
 import torch
-from torchvision import transforms
+#from torchvision import transforms
 
 
 class Aumentador_Imagenes():

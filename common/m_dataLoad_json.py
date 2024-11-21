@@ -12,6 +12,8 @@ import math
 import torch.nn.functional as F
 import torchvision
 
+from tqdm import tqdm
+
 
 def parse_json(filename):
     with open(filename) as json_file:
@@ -200,7 +202,11 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
 
 
     trainset=[]
-    for k in range(len(dftrain)):
+    if in_memory:
+        print("Reading  Training jsons labels and images ...")
+    else:
+        print("Reading  Training jsons labels ...")
+    for k in tqdm(range(len(dftrain))):
         json_file=dftrain.iloc[k]['json_files']
         f_id=dftrain.iloc[k]['fruit_ids']
         d=parse_json(json_file)
@@ -220,7 +226,12 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
         trainset.append(dict_vista)
 
     valset=[]
-    for k in range(len(dfval)):
+    if in_memory:
+        print("Reading  Validation jsons labels and images ...")
+    else:
+        print("Reading  Validation jsons labels ...")
+
+    for k in tqdm(range(len(dfval))):
         json_file=dfval.iloc[k]['json_files']
         f_id=dfval.iloc[k]['fruit_ids']
         d=parse_json(json_file)
@@ -271,7 +282,7 @@ def calcula_media_y_stds(trainset,crop_size=None):
     
     pix_dimensions=(1,2)
     area_total=0
-    for caso in trainset:
+    for caso in tqdm(trainset):
         img=caso['image']
         view_id=caso['view_id']
         if img is None: #Cuando no está en memoria
