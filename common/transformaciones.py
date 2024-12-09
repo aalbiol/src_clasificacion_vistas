@@ -3,11 +3,10 @@ import torch
 
 
 class Aumentador_Imagenes():
-    def __init__(self, geometric_transforms, color_transforms_rgb,intensity_transforms,normalize_transforms):
+    def __init__(self, geometric_transforms, color_transforms_rgb,intensity_transforms):
         self.geometric_transforms = geometric_transforms
         self.color_transforms_rbg = color_transforms_rgb
         self.intensity_transforms=intensity_transforms
-        self.normalize_transforms=normalize_transforms
 
     def __call__(self, img):
         ncanales=img.shape[0]
@@ -47,7 +46,6 @@ class Aumentador_Imagenes():
                 img1=RGB1
         else:
             img1=img
-        img1=self.normalize_transforms(img1)
         
         img2=self.geometric_transforms(img1)
         

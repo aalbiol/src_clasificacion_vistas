@@ -96,7 +96,7 @@ def lee_vista(images_folder,view_id,terminaciones,max_value,carga_mask=True):
         canales *= mascara
         # plt.imshow(canales[:3,:,:].numpy().transpose((1,2,0)),clim=(0,0.25))
         # plt.show()
-    
+
     return canales
 
 
@@ -133,7 +133,7 @@ def add_good_category(onehot):
 
 
 def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, prob_train=0.7,crop_size=(120,120),defect_types=None,splitname_delimiter='-',
-                               multilabel=True, in_memory=True, carga_mask=False):
+                               multilabel=True, in_memory=True, carga_mask=True):
     '''
     dataplaces: lista de tuplas 
       Si la tupla tiene dos elementos, el primero es el directorio de jsons y el segundo el de imágenes La lista de jsons se obtiene con glob
@@ -291,7 +291,7 @@ def calcula_media_y_stds(trainset,crop_size=None):
             max_value=caso['max_value']
             
             #print("Reading ", view_id)
-            img=lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=False)
+            img=lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=True)
         
         if crop_size is not None:
             image=torchvision.transforms.functional.center_crop(img,crop_size)

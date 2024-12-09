@@ -223,13 +223,11 @@ class ViewDataModule(pl.LightningDataModule):
                 transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
                 ])
         
-        transform_normalize=transforms.Compose([transforms.Normalize(self.medias_norm, self.stds_norm),
-                                                ])    
-        
+    
         transform_train=Aumentador_Imagenes(transform_geometry,
-                                                    transform_intensity_rgb,transform_intensity,transform_normalize)
+                                                    transform_intensity_rgb,transform_intensity)
         transform_val = Aumentador_Imagenes(transforms.CenterCrop(self.crop_size),
-                                                    None,None,transform_normalize)            
+                                                    None,None)            
 
 
         if self.trainset is not None:

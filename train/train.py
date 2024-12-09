@@ -19,7 +19,7 @@ current_file_dir = os.path.dirname(os.path.abspath(__file__))
 common_folder = os.path.join(current_file_dir, "../common")
 sys.path.append(common_folder)
 sys.path.append(current_file_dir)
-print("PATHS:",sys.path)
+# print("PATHS:",sys.path)
 
 # torch and lightning imports
 import torch
@@ -82,20 +82,7 @@ if __name__ == "__main__":
 
 
     num_channels_in=config['model']['num_channels_input']
-    model=ViewClassifier(num_channels_in,
-                lr = config['train']['learning_rate'],
-                class_names=tipos_defecto,
-                weight_decay=config['train']['weights_decay'],
-                mixup_alpha=config['train']['mixup_alpha'],
-                label_smoothing=config['train']['label_smoothing'],
-                warmup_iter=config['train']['warmup'],
-                p_dropout=config['train']['p_dropout'])
-    
-            
-    # Continuar entrenamiento a partir de un punto
-    if config['train']['initial_model'] is not None:
-        checkpoint = torch.load(config['initial_model'])
-        model.load_state_dict(checkpoint['state_dict'])
+   
 
 
     
@@ -108,7 +95,7 @@ if __name__ == "__main__":
                  defect_types=tipos_defecto,              
                  predict_path = None , 
                  batch_size =batch_size,    
-                 #num_workers=config['num_workers'],
+                 num_workers=config['train']['num_workers'],
                  normalization_means=None, # Para entrenar estimamos valores de normalizacion
                  normalization_stds=None,             
                  max_value=maxvalues,              
@@ -128,18 +115,30 @@ if __name__ == "__main__":
     print('medias_norm:',medias_norm)
     print('stds_norm:',stds_norm)
     
-
-
+    dict_norm={'medias_norm': medias_norm,
+        'stds_norm': stds_norm }
+    model=ViewClassifier(num_channels_in,
+            lr = config['train']['learning_rate'],
+            class_names=tipos_defecto,
+            weight_decay=config['train']['weights_decay'],
+            mixup_alpha=config['train']['mixup_alpha'],
+            label_smoothing=config['train']['label_smoothing'],
+            warmup_iter=config['train']['warmup'],
+            p_dropout=config['train']['p_dropout'],
+            normalization_dict=dict_norm,
+            training_size=crop_size)
+    
+            
+    # Continuar entrenamiento a partir de un punto
+    if config['train']['initial_model'] is not None:
+        checkpoint = torch.load(config['initial_model'])
+        model.load_state_dict(checkpoint['state_dict'])
 
 
     # Instantiate lightning trainer and train model
     miwandb= WandbLogger(name="prueba_dvc", project='WANDB_DVC',config=config)
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
-    
-   
-
-    
     
     num_epochs=config['train']['epochs']
     #trainer_args = {'max_epochs': num_epochs, 'logger' : None}
@@ -160,13 +159,16 @@ if __name__ == "__main__":
     
     # Save trained model
 
-    system.exit()
-    model_name=config['model_name']
-    save_path = os.path.join(config['save_path'],model_name) if config['save_path'] is not None else  model_name
+  
+    model_name=config['train']['model_name']
+    save_path = os.path.join(config['train']['model']['path'],model_name) if config['train']['model']['path'] is not None else  model_name
     trainer.save_checkpoint(save_path)
+    if not os.path.exists(config['train']['model']['path']):
+        os.makedirs(config['train']['model']['path'])
     
-    dict_norm={'medias_norm': medias_norm,
-    'stds_norm': stds_norm }
+    model.save(save_path,config=config)
     print('Saving normalization_last_train.json')
     with open('normalizacion_last_train.json', 'w') as outfile:
         json.dump(dict_norm,outfile,indent=4)
+        
+    system.exit()
