@@ -12,11 +12,11 @@ def calculate_auc_multilabel(preds,targets,clases):
     res=res.tolist()
 
     aucs={}
-    print('res',res)
+    #print('res',res)
     for c,auc in zip(clases,res):
-        print(type(c), c)
-        print('c',c)
+        #print(type(c), c)
+        #print('c',c)
         aucs[c]=auc
-        print(f'AUC({c}) : {auc:.3f}')
+        #print(f'AUC({c}) : {auc:.3f}')
     
     return aucs

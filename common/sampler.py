@@ -131,8 +131,8 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
         self.listas.append(lista)
         self.lengths.append(len(lista))
         
-        for k in range(num_clases): 
-            print('Populating class:',k)
+        for k in tqdm(range(num_clases)): 
+            #print('Populating class:',k)
             lista= get_class_items(matriz_casos,k)
             self.listas.append(lista)
             self.lengths.append(len(lista))
@@ -143,7 +143,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
         print('Sampler len=',self.len) 
 
         for count,l in enumerate(self.listas):
-            print(f'Length Lista{count}: {len(l)}')
+            print(f'  ** Length Lista {count}: {len(l)}')
 
                 
    

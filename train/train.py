@@ -85,7 +85,7 @@ if __name__ == "__main__":
     output=config['train']['output']
     save_path=output['path']
     model_file=output['model_file']
-    normalization_file=output['normalization_file']
+    
 
 
     num_channels_in=config['model']['num_channels_input']
@@ -114,7 +114,9 @@ if __name__ == "__main__":
                  )
     print('... done!')
 
-   
+  # Output
+    model_name=config['train']['output']['model_file']
+    model_path=config['train']['output']['path'] 
 
 
     medias_norm=datamodule.medias_norm.tolist()
@@ -162,20 +164,6 @@ if __name__ == "__main__":
       
     trainer.fit(model, datamodule=datamodule)
     
-    #os.system('wandb sync --clean')
-    
-    # Save trained model
+    output_model_filename = os.path.join(model_path,model_name)
+    model.save(output_model_filename,config=config)
 
-  
-    model_name=config['train']['model_name']
-    save_path = os.path.join(config['train']['model']['path'],model_name) if config['train']['model']['path'] is not None else  model_name
-    trainer.save_checkpoint(save_path)
-    if not os.path.exists(config['train']['model']['path']):
-        os.makedirs(config['train']['model']['path'])
-    
-    model.save(save_path,config=config)
-    print('Saving normalization_last_train.json')
-    with open('normalizacion_last_train.json', 'w') as outfile:
-        json.dump(dict_norm,outfile,indent=4)
-        
-    system.exit()

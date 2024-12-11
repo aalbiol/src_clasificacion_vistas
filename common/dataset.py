@@ -11,8 +11,62 @@ import torch
 from typing import Tuple,Any
 
 from torch.utils.data import Dataset
-import m_dataLoad_json
-    
+#import m_dataLoad_json
+import cv2
+
+
+
+def lee_png16(filename,max_value):
+    #print(f'Reading {filename}...')
+    assert os.path.exists(filename), f'No existe el archivo {filename}'
+    im=cv2.imread(filename,cv2.IMREAD_UNCHANGED)
+    if im.ndim ==3 :
+        im=cv2.cvtColor(im,cv2.COLOR_BGR2RGB)
+    im=im.astype('float32')/max_value
+    im[im>1]=1
+
+    im=torch.tensor(im)
+    if im.ndim ==2:# convertir de hxw --> 1 x h x w
+        im=im.unsqueeze(0)
+    else:
+        im=im.permute((2,0,1))
+    return im
+
+
+def lee_vista(images_folder,view_id,terminaciones,max_value,carga_mask=True):
+    #print("Reading ", view_id)
+    nombre_base=os.path.join(images_folder,view_id)
+    canales=[]
+
+    assert isinstance(max_value,list), 'maxvalue tiene que ser una lista de tantos elementos como canales o una lista con un unico elemento que se emplea para todos los canales'
+   
+    if len(max_value) == len(terminaciones):
+            max_values=max_value
+    else:
+        assert len(max_value)==1, "Es una lista que no tiene ni un solo elemento ni un numero de elementos igual al numero de canales"
+        max_values= max_value*len(terminaciones)
+
+    for k,t in enumerate(terminaciones):
+        nombre=nombre_base+t
+        canal=lee_png16(nombre,max_values[k])
+        canales.append(canal)
+    canales=torch.concat(canales,0)
+    if carga_mask:
+        term_mascara="_auxb1.png"
+        nombre=nombre_base+term_mascara
+        mascara=lee_png16(nombre,255)
+        color_centro=mascara[0,mascara.shape[1]//2, mascara.shape[2]//2]
+        mascara =((mascara==color_centro)*(mascara < 0.5)).float()
+
+        #print(canales.shape,mascara.shape)
+        canales *= mascara
+        # plt.imshow(canales[:3,:,:].numpy().transpose((1,2,0)),clim=(0,0.25))
+        # plt.show()
+
+    return canales
+
+
+
 # Esto es el data set para entrenar validar   
 class ViewsDataSet(Dataset):
     def __init__(self,dataset=None ,transform=None, carga_mask=False, *args, **kwargs):
@@ -37,7 +91,7 @@ class ViewsDataSet(Dataset):
             max_value=caso['max_value']
             crop_size=caso['crop_size']
             #print("Reading ", view_id)
-            imagen=m_dataLoad_json.lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=self.carga_mask)
+            imagen=lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=self.carga_mask)
         else:
             #print("Imagen ya disponible:" , view_id)
             imagen=caso['image']
@@ -55,41 +109,3 @@ class ViewsDataSet(Dataset):
     def __len__(self) -> int:
         return len(self.dataset)
 
-
-# Este se emplea para inferencia
-class FileNamesDataSet(Dataset):
-    '''
-    Clase para suministrar archivos de una lista cuando no hay anotacion
-    Solo se devuelve la imagen y el fruitid y el viewid.
-    Por compatibilidad se devuelve un target = None
-    '''
-    def __init__(self,root_folder=None, filenames_list=None ,transform=None, 
-                 field_delimiter='-',max_value = 255, *args, **kwargs):
-        super().__init__(*args,  **kwargs)
-        
-        self.root_folder=root_folder
-        self.filenames_list=list(filenames_list)
-        self.transform = transform
-        self.field_delimiter=field_delimiter
-        self.max_value = max_value
-        
-              
-    def __getitem__(self, index: int) -> Tuple[Any, Any]:              
-        view_id=m_dataLoad_json.view_id(self.filenames_list[index])
-        fruit_id=m_dataLoad_json.fruit_id(self.filenames_list[index],delimiter=self.field_delimiter)
-        
-        
-        img_fullname=(self.filenames_list[index] if self.root_folder is None else os.path.join(self.root_folder,self.filenames_list[index]))
-        print("Getting ", img_fullname)
-        imagen= m_dataLoad_json.lee_png16(img_fullname,self.max_value)
-           
-        if self.transform is not None:                
-            imagen2 = self.transform(imagen)
-        else:
-            imagen2=imagen
-        target=None     # Este data set no está etiquetado               
-        return imagen2, target, view_id,fruit_id 
-              
-    def __len__(self) -> int:
-        return len(self.filenames_list)
- 
