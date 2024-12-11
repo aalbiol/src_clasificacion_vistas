@@ -5,6 +5,7 @@ data:
   delimiter: _
   maxvalues:
   - 1024
+  prob_train: 0.8
   root_folder: mscanData/pngs_anotados/Smart4Olives/
   terminaciones:
   - _r.png
@@ -16,21 +17,17 @@ data:
   - _nir2.png
   - _nir4.png
   train:
-  - !!python/tuple
-    - list_train.txt
+  - - train_list.txt
     - season_2022/manzanilla/Season_oct_2022_set01_rev1/jsons
     - season_2022/manzanilla/Season_oct_2022_set01_rev1/images
-  - !!python/tuple
-    - list_train.txt
+  - - train_list.txt
     - season_2023/ANOTADAS_IRENE/all/manzanilla/jsons
     - season_2023/ANOTADAS_IRENE/all/manzanilla/images
   val:
-  - !!python/tuple
-    - list_val.txt
+  - - val_list.txt
     - season_2022/manzanilla/Season_oct_2022_set01_rev1/jsons
     - season_2022/manzanilla/Season_oct_2022_set01_rev1/images
-  - !!python/tuple
-    - list_train.txt
+  - - val_list.txt
     - season_2023/ANOTADAS_IRENE/all/manzanilla/jsons
     - season_2023/ANOTADAS_IRENE/all/manzanilla/images
 model:
@@ -46,11 +43,11 @@ model:
   resnet_version: 50
 train:
   affine:
-    scale: !!python/tuple
+    scale:
     - 0.7
     - 1.1
     shear: 15
-    translate: !!python/tuple
+    translate:
     - 0.15
     - 0.15
   augmentation:

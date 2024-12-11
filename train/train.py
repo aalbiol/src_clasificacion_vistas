@@ -79,6 +79,13 @@ if __name__ == "__main__":
     crop_size=config['data']['crop_size']
     tipos_defecto=config['model']['defect_types']
     aumentacion=config['train']['augmentation']
+    
+    
+    
+    output=config['train']['output']
+    save_path=output['path']
+    model_file=output['model_file']
+    normalization_file=output['normalization_file']
 
 
     num_channels_in=config['model']['num_channels_input']

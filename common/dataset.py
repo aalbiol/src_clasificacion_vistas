@@ -48,6 +48,9 @@ class ViewsDataSet(Dataset):
             imagen2=imagen
                            
         return imagen2,target,view_id,fruit_id # imagen, lista_de_etiquetas, (ruta_al_archivo, vista_id) 
+    
+    def __get_target__(self, index: int) -> Any:
+        return self.dataset[index]['labels']
        
     def __len__(self) -> int:
         return len(self.dataset)

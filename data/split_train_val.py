@@ -1,10 +1,17 @@
 from glob import glob
 import os
 import sys
-sys.path.append("../common")
-sys.path.append("common")
+
 import random
 import yaml
+
+import sys
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Define the relative path to the folder you want to add
+
+common_folder = os.path.join(current_file_dir, "../common")
+sys.path.append(common_folder)
 
 from m_dataLoad_json import view_id, fruit_id
 
@@ -83,6 +90,6 @@ if __name__ == '__main__':
         directorios.append(os.path.join(root_folder,dp[1]))
     directorios=list(set(directorios)) 
     prob_train=config['data']['prob_train']   
-    create_train_val_lists(directorios,prob_train=0.8,delimiter='_',train_list_name='train_list.txt',val_list_name='val_list.txt')
+    create_train_val_lists(directorios,prob_train=prob_train,delimiter='_',train_list_name='train_list.txt',val_list_name='val_list.txt')
             
     

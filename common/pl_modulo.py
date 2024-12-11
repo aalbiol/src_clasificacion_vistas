@@ -526,20 +526,20 @@ class ViewClassifier_Old(pl.LightningModule):
             self.F1Score_macro=F1Score('binary').to(self.device)
             self.F1Score_micro=F1Score('binary').to(self.device)
 
-        if self.valpreds is not None:
-            fname1 = 'valpreds_multilabel.pt'
-            fname2 = 'valtargets_multilabel.pt'
-            print('valpreds.shape',self.valpreds.shape)
-            torch.save(self.valpreds,fname1)
-            torch.save(self.valtargets,fname2)
-            self.valpreds=None
-            self.valtargets=None
+        # if self.valpreds is not None:
+        #     fname1 = 'valpreds_multilabel.pt'
+        #     fname2 = 'valtargets_multilabel.pt'
+        #     print('valpreds.shape',self.valpreds.shape)
+        #     torch.save(self.valpreds,fname1)
+        #     torch.save(self.valtargets,fname2)
+        #     self.valpreds=None
+        #     self.valtargets=None
         
             
-        if self.valfilenames is not None:
-            fname3 = 'valfilenames_multilabel.txt'            
-            write_names(fname3,self.valfilenames)
-            self.valfilenames = None
+        # if self.valfilenames is not None:
+        #     fname3 = 'valfilenames_multilabel.txt'            
+        #     write_names(fname3,self.valfilenames)
+        #     self.valfilenames = None
         return    
 
     def predice_fruto(self,vista):
