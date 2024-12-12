@@ -29,7 +29,7 @@ from torchvision import transforms
 from torch.optim.lr_scheduler import ExponentialLR
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from torch.optim.lr_scheduler import LinearLR
-
+import matplotlib.pyplot as plt
 
 import datetime
 
@@ -344,7 +344,7 @@ class ViewClassifier(pl.LightningModule):
         if len(sin_prefijos) >1:
             for nombre in tqdm(sin_prefijos):
                 #print("Processing ",nombre)
-                x=dataset.lee_vista(images_folder='.',view_id=nombre,terminaciones=terminaciones,max_value=max_value)            
+                x=dataset.lee_vista(images_folder='.',view_id=nombre,terminaciones=terminaciones,max_value=max_value,carga_mask=False)            
 
                 im=x.to(device)
 
@@ -375,15 +375,22 @@ class ViewClassifier(pl.LightningModule):
         else:
             for nombre in sin_prefijos:
                 #print("Processing ",nombre)
-                x=dataset.lee_vista(images_folder='.',view_id=nombre,terminaciones=terminaciones,max_value=max_value)            
+                x=dataset.lee_vista(images_folder='.',view_id=nombre,terminaciones=terminaciones,max_value=max_value,carga_mask=False)            
+#                print("Entrada ",x.shape, x.max(), x.min())
 
                 im=x.to(device)
+
+                # _=plt.imshow(im[:3,:,:].cpu().numpy().transpose(1,2,0),clim=[-2,2])
+                # _=plt.show()
 
                 #redimensionada=transforms.Resize(self.training_size)(im)
                 #medias=self.normalization_dict['medias_norm']
                 #stds=self.normalization_dict['stds_norm']
                 #normalizada=transforms.Normalize(medias,stds)(redimensionada)  
                 normalizada=transformacion(im)
+                
+
+#                print("Normalizada ",  normalizada.shape, normalizada.mean(dim=(-1,-2)), normalizada.std(dim=(-1,-2)))
                 with torch.no_grad():
                     logits=self.forward(normalizada.unsqueeze(0))
                     
