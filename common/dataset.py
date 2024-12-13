@@ -13,6 +13,7 @@ from typing import Tuple,Any
 from torch.utils.data import Dataset
 #import m_dataLoad_json
 import cv2
+import pycimg
 
 
 
@@ -109,3 +110,48 @@ class ViewsDataSet(Dataset):
     def __len__(self) -> int:
         return len(self.dataset)
 
+ 
+class CImgListDataSet(Dataset):
+    def __init__(self,dataset=None , transform=None, channel_list=None, *args, **kwargs):
+        super().__init__(*args,  **kwargs)
+        
+        self.dataset=dataset   
+        self.transform = transform
+        self.channel_list=channel_list
+        
+
+        
+              
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        caso=self.dataset[index]
+        
+        target =caso['labels'].float()
+        fruit_id=caso['fruit_id']
+        vistas=caso['image']
+        imags_folder=caso['imag_folder']
+        maxvalue=caso['max_value']
+        
+        if target.isnan().sum() >0:
+            print("\n\n******Imagen ", fruit_id, "labels:",target )
+        if vistas is None: #Cuando no está en memoria
+            nombre_cimg=os.path.join(imags_folder,fruit_id)
+            nombre_cimg += ".cimg" 
+            assert os.path.exists(nombre_cimg), f'No existe el archivo {nombre_cimg}'       
+            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=self.channel_list) # lista de tensores normalizados en intensidad 
+            #Tamaños diferentes
+        
+        assert vistas is not None, f'No se ha podido cargar la imagen {fruit_id} Type Vistas: {type(vistas)}'
+        vistas_transformed = [] # cada vista sufre una aumentacion diferente
+        if self.transform is not None:        
+            for vista in vistas:
+                    assert vista is not None, f'No se ha podido cargar la imagen {fruit_id} Type Vista: {type(vista)}'
+                    vista = self.transform(vista)                                
+                    vistas_transformed.append(vista)               
+        else:
+            vistas_transformed=vistas
+        vistas_transformed=torch.stack(vistas_transformed,axis=0)                    
+        return vistas_transformed,target,fruit_id,imags_folder
+    def __get_target__(self, index: int) -> Any:
+        return self.dataset[index]['labels'] 
+    def __len__(self) -> int:
+        return len(self.dataset)

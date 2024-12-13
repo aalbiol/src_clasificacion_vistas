@@ -10,6 +10,7 @@ sys.path.append(current_file_dir)
 import torch
 import pytorch_lightning as pl
 import numpy as np
+import math
 
 from torchvision import transforms
 
@@ -24,11 +25,14 @@ import sampler
 from transformaciones import Aumentador_Imagenes
 
 
-from dataset import ViewsDataSet
+from dataset import ViewsDataSet,CImgListDataSet
 import pandas as pd
 import json
+import glob
 
 from tqdm import tqdm
+
+import pycimg
 
 from dataset import lee_vista
 
@@ -95,6 +99,20 @@ def fruit_id(filename,delimiter):
 
     id=id[:-1]
     id=delimiter.join(id)
+
+    return id
+
+
+def fruit_id_MIL(filename):
+    '''
+    Dado un nombre de fichero, 
+    obtiene el basename
+    elimina el _xx.json
+
+    '''
+    basename=os.path.basename(filename)
+    id=os.path.splitext(basename)[0]
+ 
 
     return id
 
@@ -231,6 +249,73 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
     return trainset,valset,tipos_defecto
         
 
+
+
+def genera_ds_jsons_multilabelMIL(root,  dataplaces, sufijos=None,maxvalue=255, defect_types=None, in_memory=True,channel_list=None):
+
+    json_files=[]
+    imags_directorio=[]
+
+    for place in dataplaces:
+        
+        lista_filename=place[0]
+        anotaciones = place[1]
+        imagenes=place[2]
+        anot_folder=os.path.join(root,anotaciones)
+        imags_folder=os.path.join(root,imagenes)
+        lista_filename=os.path.join(anot_folder,lista_filename)        
+        with open(lista_filename) as f:
+            fichs = f.readlines()
+        fichs=[f.strip() for f in fichs]
+        
+        ficheros=[os.path.join(anot_folder,f) for f in fichs]
+        
+        json_files +=ficheros#FullPath
+        imagenes= [imags_folder]*len(fichs)
+        imags_directorio += imagenes
+
+
+    if defect_types is None:
+        tipos_defecto=set()
+        for json_file in json_files:
+            d=parse_json(json_file)
+            defects=extract_tipos_defecto(d)
+            defects=set(defects)   
+            tipos_defecto = tipos_defecto.union(defects)
+       
+        tipos_defecto=list(tipos_defecto)
+        tipos_defecto.sort()
+        print('Tipos Defecto de JSONS:', tipos_defecto)
+    else:
+        tipos_defecto=defect_types
+        print('Tipos de Defecto por configuracion:', tipos_defecto)
+    
+    out=[]
+    for fruto in zip(json_files,imags_directorio):
+        jsonfile=fruto[0]
+        imags_folder=fruto[1]
+        d=parse_json(jsonfile)
+        onehot=extract_one_hot(d,tipos_defecto)
+        fruitid=fruit_id_MIL(jsonfile)
+        # json_sin_ext=os.path.splitext(jsonfile)[0]
+        # json_sin_ext_sin_dir=os.path.basename(json_sin_ext)
+        # fruit_id=json_sin_ext_sin_dir
+        if in_memory:
+            nombre_cimg=os.path.join(imags_folder,fruitid)
+            nombre_cimg += ".cimg"        
+            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
+        else:
+            vistas=None
+        dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 
+                     'imag_folder': imags_folder,  'max_value':maxvalue}
+        out.append(dict_fruto)     
+            
+    
+    return out,tipos_defecto
+        
+
+
+
 # ===================================== NORMALIZACION ==================
 # 
 def calcula_media_y_stds(trainset,crop_size=None):
@@ -279,6 +364,36 @@ def calcula_media_y_stds(trainset,crop_size=None):
     return medias,stds
 
 
+
+def calcula_media_y_stds_MIL(trainset):
+    suma=0
+    suma2=0
+    npixels=0
+    
+    pix_dimensions=(1,2) # El eje 0 es el color
+    area_total=0
+    for caso in trainset:
+        vistas=caso['image']
+        fruit_id=caso['fruit_id']
+        maxvalue=caso['max_value']
+        if vistas is None: #Cuando no está en memoria
+            imags_folder=caso['imag_folder']
+            nombre_cimg=os.path.join(imags_folder,fruit_id)
+            nombre_cimg += ".cimg"        
+            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue) # lista de tensores normalizados en intensidad 
+            
+        for v in vistas:
+            suma +=torch.sum(v,axis=pix_dimensions)
+            suma2 +=torch.sum(v*v,axis=pix_dimensions)
+            npixels += v.shape[pix_dimensions[0]]* v.shape[pix_dimensions[1]]
+            
+
+    #print('medias:',medias) 
+    medias= suma / npixels
+    medias2=suma2 / npixels
+    stds=np.sqrt(medias2 - medias*medias)
+
+    return medias.tolist(),stds.tolist()
 
 
 
@@ -340,7 +455,24 @@ def my_collate_fn(data): # Crear batch a partir de lista de casos
         'fruit_ids': fruit_ids
     }
  
+def my_collate_fn_MIL(data): # Genera un batch a partir de una lista de frutos
+    
+    images = [d[0] for d in data]
+    images = torch.concat(images, axis = 0) # tendra dimensiones numvistastotalbatch, 3,250,250
+    
+    nviews = [d[0].shape[0] for d in data] # contiene (nviews0, nviews1,,... ) con tantos elementos como frutos tenga el batch
+    # Sirve para poder trocear luego por frutos
+    
+    labels = [d[1] for d in data]
+    labels = torch.stack(labels,axis=0) #(5)
 
+    paths = [d[2] for d in data]
+    return { #(6)
+        'images': images, 
+        'label': labels,
+        'nviews': nviews,
+        'paths': paths
+    }
 
 class ViewDataModule(pl.LightningDataModule):
     def __init__(self, 
@@ -357,6 +489,7 @@ class ViewDataModule(pl.LightningDataModule):
                  num_workers=-1,
                  max_value=1024,
                  crop_size=(120,120),
+                 training_size=(120,120),
                  delimiter='_',
                  carga_mask=True,
                  multilabel=True,
@@ -388,7 +521,7 @@ class ViewDataModule(pl.LightningDataModule):
         super().__init__()
 
   
-
+        assert augmentation is not None
         self.batch_size = batch_size
         self.num_workers = num_workers if num_workers >= 0 else multiprocessing.cpu_count()-1
 
@@ -407,6 +540,7 @@ class ViewDataModule(pl.LightningDataModule):
         self.crop_size=crop_size
         self.carga_mask=carga_mask
         self.augmentation=augmentation
+        self.training_size=training_size
         
         if train_dataplaces is not None:
             if in_memory:
@@ -457,23 +591,8 @@ class ViewDataModule(pl.LightningDataModule):
 
         transform_normalize=transforms.Compose([transforms.Normalize(self.medias_norm, self.stds_norm),
                                                 ])
-        if self.augmentation is None:
-            transform_geometry= transforms.Compose([   
-            transforms.RandomHorizontalFlip(0.5),
-            transforms.RandomVerticalFlip(0.5),
-            transforms.RandomRotation(30),
-            transforms.RandomAffine(degrees=0, shear=15, scale=(0.7, 1.1),translate=(0.15,0.15)),
-            transforms.CenterCrop(self.crop_size)
-            ])
-            transform_intensity_rgb= transforms.Compose([
-                transforms.ColorJitter(brightness=(0.8,1.4), hue=0.01,contrast=(0.8,1.55),saturation=0.15)            
-                ])
-            transform_intensity= transforms.Compose([
-                transforms.ColorJitter(brightness=(0.8,1.4),contrast=(0.8,1.55))            
-                ])
-            
-        else:
-            augmentation=self.augmentation
+        augmentation=self.augmentation
+        if self.crop_size is not None:
             transform_geometry= transforms.Compose([   
             transforms.RandomHorizontalFlip(0.5),
             transforms.RandomVerticalFlip(0.5),
@@ -482,20 +601,43 @@ class ViewDataModule(pl.LightningDataModule):
                                     scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
                                     ),
             transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)
             ])
-            transform_intensity_rgb= transforms.Compose([
-                transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
-                ])
-            transform_intensity= transforms.Compose([
-                transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
-                ])
-        
+        else:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
+            transforms.Resize(self.training_size)
+            ])
+
+
+
+        transform_intensity_rgb= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
+            ])
+        transform_intensity= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
+            ])
     
+
         transform_train=Aumentador_Imagenes(transform_geometry,
                                                     transform_intensity_rgb,transform_intensity,transform_normalize)
-        transform_val = Aumentador_Imagenes(transforms.CenterCrop(self.crop_size),
-                                                    None,None,transform_normalize)            
+        # transform_val = Aumentador_Imagenes(transforms.CenterCrop(self.crop_size),
+        #                                             None,None,transform_normalize)            
+        if self.crop_size is not None:             
+            tamanyo=transforms.Compose([
+            transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)])
 
+            transform_val = Aumentador_Imagenes(tamanyo,                                                
+                                                    None,None,transform_normalize)            
+        else:
+            transform_val = Aumentador_Imagenes(transforms.Resize(self.training_size),
+                                                    None,None,transform_normalize)
 
         if self.trainset is not None:
             self.train_dataset = ViewsDataSet(dataset=self.trainset, transform = transform_train,carga_mask=self.carga_mask)           
@@ -561,4 +703,178 @@ class ViewDataModule(pl.LightningDataModule):
 
 
 
+## Cuando las vistas de un fruto están almacenadas en CIMGLists y las anotaciones en JSONS arandanos
+class JSONSCImgDataModule(pl.LightningDataModule):
+    def __init__(self, 
+                 root_path=None,
+                train_dataplaces=None,
+                val_dataplaces=None,
+                pred_dataplaces=None,                
+                batch_size=5,
+                num_workers = -1,
+                defect_types = None,
+                maxvalue=255,
+                normalization_means=None, #if none calculate from training data
+                normalization_stds=None,
+                in_memory=True,
+                imagesize=(112,112),
+                crop_size=None,
+                channel_list=[0,1,2],
+                augmentation=None,
+                  **kwargs):
+        super().__init__()
+
+        assert augmentation is not None    
+        self.batch_size = batch_size
+        self.num_workers = num_workers if num_workers > 0 else multiprocessing.cpu_count()-1
+        
+        self.tipos_defecto=defect_types,
+        self.root_path=root_path
+        self.medias_norm = normalization_means
+        self.stds_norm = normalization_stds
+        self.target_image_size =imagesize
+        self.train_dataplaces=train_dataplaces
+        self.val_dataplaces=val_dataplaces
+        self.pred_dataplaces=pred_dataplaces
+        self.root_path=root_path
+        self.imagesize=imagesize
+        self.training_size=imagesize
+        self.channel_list=channel_list
+        self.augmentation = augmentation
+        self.crop_size=crop_size
+        
+        self.trainset =None
+        self.valset = None
+        if self.train_dataplaces is not None:
+            self.trainset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
+                                                                                    dataplaces=self.train_dataplaces, 
+                                                                                    maxvalue=maxvalue,
+                                                                                    defect_types=defect_types,
+                                                                                    in_memory=in_memory,
+                                                                                    channel_list=self.channel_list)
+ 
+        if self.val_dataplaces is not None:
+            self.valset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
+                                                                                    dataplaces=self.val_dataplaces, 
+                                                                                    maxvalue=maxvalue,
+                                                                                    defect_types=defect_types,in_memory=in_memory,
+                                                                                    channel_list=self.channel_list)
+        
+        if self.medias_norm is None or self.stds_norm is None:
+            print('\n *** INFO: Estimando medias y varianzas normalizacion')
+            self.medias_norm,self.stds_norm=calcula_media_y_stds_MIL(self.trainset)
+            print('     ** Estimated medias_norm:', self.medias_norm)
+            print('     ** Estimated stds_norm:', self.stds_norm)
+            
+
+        transform_normalize=transforms.Compose([transforms.Normalize(self.medias_norm, self.stds_norm) ])
+            
+        augmentation=self.augmentation
+        if self.crop_size is not None:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
+            transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)
+            ])
+        else:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
+            transforms.Resize(self.training_size)
+            ])
+
+
+
+        transform_intensity_rgb= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
+            ])
+        transform_intensity= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
+            ])
     
+
+        transform_train=Aumentador_Imagenes(transform_geometry,
+                                                    transform_intensity_rgb,transform_intensity,transform_normalize)
+        
+        if self.crop_size is not None:             
+            tamanyo=transforms.Compose([
+            transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)])
+
+            transform_val = Aumentador_Imagenes(tamanyo,                                                
+                                                    None,None,transform_normalize)            
+        else:
+            transform_val = Aumentador_Imagenes(transforms.Resize(self.training_size),
+                                                    None,None,transform_normalize)
+        
+        if defect_types is None:
+            print(f"JSONSCImgDataModule tipos defecto desde JSONS: {self.tipos_defecto}")
+        else:
+            print(f"JSONSCImgDataModule tipos defecto desde configuración: {self.tipos_defecto}")
+            
+
+        
+            
+        self.numlabels=len(self.tipos_defecto)           
+
+        if self.train_dataplaces is not None:
+                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list)  
+                
+        if self.val_dataplaces is not None:            
+            self.val_dataset=CImgListDataSet(dataset=self.valset,transform=transform_val,channel_list=self.channel_list)
+
+            
+        print(f"JSONSCImgDataModule num labels = {self.numlabels}")
+        if self.train_dataplaces is not None:
+            print(f"JSONSCImgDataModule len total trainset =   {len(self.trainset )}")
+        if self.val_dataplaces is not None:
+            print(f"JSONSCImgDataModule len total valset =   {len(self.valset )}")
+            
+            
+
+       
+
+        print("batch_size in JSONSCImgDataModule ", self.batch_size)
+        
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage=None):
+        return None
+    
+     
+    def train_dataloader(self):
+        print("batch_size in Dataloader train", self.batch_size)
+        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset)   
+        #return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, collate_fn=my_collate_fn)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, sampler=misampler, num_workers=self.num_workers, collate_fn=my_collate_fn_MIL)
+
+    def val_dataloader(self):
+        print("batch_size in Dataloader val", self.batch_size)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, drop_last=False,shuffle=False, collate_fn=my_collate_fn_MIL)
+    # def predict_dataloader(self):
+    #     print("batch_size in predict data loader", self.batch_size)
+    #     return DataLoader(self.val_dataset , batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=my_collate_fn)
+
+
+
+
+
+    @staticmethod
+    def add_model_specific_args(parser):
+        #parser = parent_parser.add_argument_group("model")
+        #parser.add_argument("--data.train_set_csv", type=str, default='text_files/train_set_articulo.csv')
+        #parser.add_argument("--data.test_set_csv", type=str, default='text_files/test_set_articulo.csv')
+        return parser
+
+      

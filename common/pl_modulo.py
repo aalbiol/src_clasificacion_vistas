@@ -263,12 +263,12 @@ class ViewClassifier(pl.LightningModule):
         self.aucs={}
         for i in range(self.num_classes):
             self.aucs[f'Val AUC - {self.class_names[i]}']=auc[i].item()
-
+        self.log_dict(self.aucs)#,on_step=False, on_epoch=True, prog_bar=True, logger=True)
         if self.valpreds is not None:
             self.valpreds=None
             self.valtargets=None
             self.valfilenames = None
-        self.log_dict(self.aucs)#,on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        
         return    
 
     def on_training_epoch_end(self) -> None:
@@ -283,7 +283,8 @@ class ViewClassifier(pl.LightningModule):
         'training_date': datetime.datetime.now(),
         'final_val_aucs':self.aucs,
         'num_channels_in':self.num_channels_in,
-        'p_dropout':self.p_dropout
+        'p_dropout':self.p_dropout,
+        'model_type':'Classifier',
     }
 
         if config is not None:

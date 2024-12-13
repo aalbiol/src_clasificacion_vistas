@@ -23,6 +23,7 @@ def get_matriz_casos(dataset):
     '''
     matriz_casos=[]
     print(">>>> Get_matriz_casos")
+    print(">>>> Dataset type:", type(dataset))
     for k in tqdm(range(len(dataset))):
         target=dataset.__get_target__(k)
         #print(">>>> Get_matriz_casos", target)
@@ -119,7 +120,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
     Util para clases muy desbalanceadas
     '''
     def __init__(self,dataset):
-        print ('>>>>>>>>>>>>>>>>< Sampler init')
+        print ('>>>>>>>>>>>>>>>>< Sampler init Type Dataset:', type(dataset))
         matriz_casos=get_matriz_casos(dataset)
         estadistica_clase=get_class_distribution(matriz_casos)
         num_clases=len(estadistica_clase) 

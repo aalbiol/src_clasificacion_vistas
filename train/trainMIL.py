@@ -32,9 +32,11 @@ from pytorch_lightning.callbacks import  ModelCheckpoint
 
 from m_finetuning import FeatureExtractorFreezeUnfreeze
 
-from pl_datamodule import ViewDataModule
+from pl_datamodule import JSONSCImgDataModule
 
-from pl_modulo import ViewClassifier
+from pl_MIL_modulo import MILClassifier
+
+
 
 
 #from m_dataLoad_json import write_list
@@ -77,6 +79,8 @@ if __name__ == "__main__":
     in_memory=config['train']['in_memory']
     maxvalues=config['data']['maxvalues']
     crop_size=config['data']['crop_size']
+    channel_list=config['data']['channel_list']
+    training_size=config['data']['training_size']
     tipos_defecto=config['model']['defect_types']
     aumentacion=config['train']['augmentation']
     
@@ -89,29 +93,24 @@ if __name__ == "__main__":
 
 
     num_channels_in=config['model']['num_channels_input']
+    model_version= str(config['model']['model_version'])
    
 
 
     
     print('Creating DataModule...')
-    datamodule = ViewDataModule(
-        training_path = root_folder, 
-		 train_dataplaces=train_dataplaces,
-         val_dataplaces=val_dataplaces,
-                 suffixes=terminaciones,
-                 defect_types=tipos_defecto,              
-                 predict_path = None , 
-                 batch_size =batch_size,    
-                 num_workers=config['train']['num_workers'],
-                 normalization_means=None, # Para entrenar estimamos valores de normalizacion
-                 normalization_stds=None,             
-                 max_value=maxvalues,              
-                 crop_size=crop_size,
-                 delimiter=delimiter,
-                 carga_mask=False, # En clasificación no se cargan las máscaras
+    datamodule =  JSONSCImgDataModule( root_path = root_folder, 
+                 train_dataplaces=train_dataplaces,
+                 val_dataplaces=val_dataplaces,
+                 defect_types=tipos_defecto,                                                 
+                 predict_dataplaces = None , 
+                 batch_size=batch_size, #Num frutos
+                 imagesize=training_size,
+                 normalization_means=None,
+                 normalization_stds= None,
+                 max_value=maxvalues,
                  in_memory=in_memory,
-                 augmentation=aumentacion,
-                 )
+                 channel_list=channel_list,augmentation=aumentacion,)
     print('... done!')
 
   # Output
@@ -119,23 +118,27 @@ if __name__ == "__main__":
     model_path=config['train']['output']['path'] 
 
 
-    medias_norm=datamodule.medias_norm.tolist()
-    stds_norm=datamodule.stds_norm.tolist()
+    medias_norm=datamodule.medias_norm
+    stds_norm=datamodule.stds_norm
     print('medias_norm:',medias_norm)
     print('stds_norm:',stds_norm)
     
     dict_norm={'medias_norm': medias_norm,
         'stds_norm': stds_norm }
-    model=ViewClassifier(num_channels_in,
-            lr = config['train']['learning_rate'],
-            class_names=tipos_defecto,
-            weight_decay=config['train']['weights_decay'],
-            mixup_alpha=config['train']['mixup_alpha'],
-            label_smoothing=config['train']['label_smoothing'],
-            warmup_iter=config['train']['warmup'],
-            p_dropout=config['train']['p_dropout'],
-            normalization_dict=dict_norm,
-            training_size=crop_size)
+
+    model = MILClassifier(
+                            optimizer =config['train']['optimizer'], 
+                            lr = config['train']['learning_rate'],
+                            num_channels_in=len(channel_list),
+                            model_version=model_version,
+                            warmup_iter=config['train']['warmup'],
+                            class_names=tipos_defecto,
+                            p_dropout=config['train']['p_dropout'],
+                            label_smoothing=config['train']['label_smoothing'],
+                            weight_decay=config['train']['weights_decay'],
+                            normalization_dict=dict_norm,
+                            training_size=training_size,)
+    
     
             
     # Continuar entrenamiento a partir de un punto
@@ -145,25 +148,26 @@ if __name__ == "__main__":
 
 
     # Instantiate lightning trainer and train model
-    miwandb= WandbLogger(name="prueba_dvc", project='WANDB_DVC',config=config)
+    miwandb= WandbLogger(name="prueba_dvc_mil", project='WANDB_DVC',config=config)
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     
     num_epochs=config['train']['epochs']
-    #trainer_args = {'max_epochs': num_epochs, 'logger' : None}
+    
     trainer_args = {'max_epochs': num_epochs, 'logger' : miwandb}
     print('num_epochs:',num_epochs)
     
 
-    callbacks3=[FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['train']['unfreeze_epoch'],initial_denom_lr=2),
-                #ModelCheckpoint(monitor='val_loss',dirpath='.',filename='{epoch}-{val_loss:.2f}-{other_metric:.2f}',save_top_k=1),
-                lr_monitor]
+    callbacks3=[FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['train']['unfreeze_epoch'],initial_denom_lr=2),]
     
     trainer = pl.Trainer(callbacks=callbacks3,**trainer_args)
     
-      
+    print("\n***************************************\n")
+    print("Starting training...")  
     trainer.fit(model, datamodule=datamodule)
+
     
+    # Create model_path if it does not exist
     Path(model_path).mkdir(parents=True, exist_ok=True)
     output_model_filename = os.path.join(model_path,model_name)
     model.save(output_model_filename,config=config)
