@@ -453,6 +453,7 @@ def print_model_info(path):
     print("image_size: ",image_size)
     print("class_names: ",class_names)
     print("training_date: ",training_date)
+    print("final_val_aucs: ",final_val_aucs)
 
     print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
     if config is not None:

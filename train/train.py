@@ -144,8 +144,9 @@ if __name__ == "__main__":
         model.load_state_dict(checkpoint['state_dict'])
 
 
-    # Instantiate lightning trainer and train model
-    miwandb= WandbLogger(name="prueba_dvc", project='WANDB_DVC',config=config)
+    
+    logname=config['train']['logname']
+    miwandb= WandbLogger(name=logname, project='WANDB_DVC',config=config, entity='multiscan')
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     
@@ -159,6 +160,7 @@ if __name__ == "__main__":
                 #ModelCheckpoint(monitor='val_loss',dirpath='.',filename='{epoch}-{val_loss:.2f}-{other_metric:.2f}',save_top_k=1),
                 lr_monitor]
     
+    # Instantiate lightning trainer and train model
     trainer = pl.Trainer(callbacks=callbacks3,**trainer_args)
     
       

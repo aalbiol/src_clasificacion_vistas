@@ -13,7 +13,7 @@ current_file_dir = os.path.dirname(os.path.abspath(__file__))
 common_folder = os.path.join(current_file_dir, "../common")
 sys.path.append(common_folder)
 
-from m_dataLoad_json import view_id, fruit_id
+from pl_datamodule import view_id, fruit_id
 
 
 def split_train_val(directorio,prob_train=0.8,delimiter='_'):

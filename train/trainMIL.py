@@ -148,7 +148,8 @@ if __name__ == "__main__":
 
 
     # Instantiate lightning trainer and train model
-    miwandb= WandbLogger(name="prueba_dvc_mil", project='WANDB_DVC',config=config)
+    logname=config['train']['logname']
+    miwandb= WandbLogger(name=logname, project='WANDB_DVC',config=config, entity='multiscan')
 
     lr_monitor = LearningRateMonitor(logging_interval='epoch')
     
