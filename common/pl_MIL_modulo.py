@@ -21,6 +21,12 @@ from torch.optim.lr_scheduler import LinearLR
 
 import pickle
 import datetime
+import pl_datamodule
+import dataset
+from torchvision import transforms
+
+from tqdm import tqdm
+import pycimg
 
 
 # Para clasificar vistas entrenando con MIL cuando anotaciones son por fruto y no por vista    
@@ -40,12 +46,13 @@ class MILClassifier(pl.LightningModule):
         super().__init__()
 
 
-        assert class_names is not None
+        
         self.class_names=class_names
-        assert len(class_names)
+        
         self.__dict__.update(locals())
         
-        self.num_classes=len(class_names)
+        if class_names is not None:
+            self.num_classes=len(class_names)
         self.num_channels_in=num_channels_in
         self.weight_decay=weight_decay
         self.normalization_dict=normalization_dict # Para normalizar en inferencia. Para entrenar no se emplea
@@ -56,7 +63,9 @@ class MILClassifier(pl.LightningModule):
         self.p_dropout=p_dropout
                                 
         self.optimizer_name = optimizer
-        print('FruitMILClassifier num clases out=',self.num_classes)
+        
+        if self.class_names is not None:
+            print('FruitMILClassifier num clases out=',self.num_classes)
         # Using a pretrained ResNet backbone
         
         if model_version is not None:
@@ -101,6 +110,9 @@ class MILClassifier(pl.LightningModule):
         
         El número de columnas igual al número de tipos de defecto
         '''
+        
+        assert self.class_names is not None
+        
         logits_all_views = self.modelo(X)
         
         
@@ -115,7 +127,7 @@ class MILClassifier(pl.LightningModule):
          
         logits_fruit = torch.concat(logits_fruit,axis = 0)
         
-        return logits_fruit,logits_fruits #nfrutos x nclases , lista de logits de cada fruto
+        return logits_fruit,logits_all_views 
     
     def criterion(self, logits, labels):       
         if self.pos_weights is None:
@@ -285,6 +297,7 @@ class MILClassifier(pl.LightningModule):
         self.class_names=leido['class_names']
         self.num_classes=len(self.class_names)
         self.p_dropout=leido['p_dropout']
+        self.num_classes=len(self.class_names)
         self.modelo=modelos.resnet50MIL(num_channels_in=self.num_channels_in,
                                          num_classes=self.num_classes,
                                          p_dropout=self.p_dropout)
@@ -295,4 +308,84 @@ class MILClassifier(pl.LightningModule):
         self.class_names=leido['class_names']
         self.training_date=leido['training_date']
         self.crop_size=leido['config']['data']['crop_size']
+        self.maxvalues=leido['config']['data']['maxvalues']
+        #print("Loading maxvalues:",self.maxvalues)
+        self.channel_list=leido['config']['data']['channel_list']
     
+    
+    
+    def predict(self, nombres,device,delimiter="_",include_images=False,remove_suffix=True):
+        '''
+        lista de nombres de imágenes de cimgs
+
+        Cada archivo incluye una lista de las vistas de un fruto.
+        Las vistas pueden tener distintos tamaños
+
+        
+        '''
+        if not isinstance(nombres ,list):
+            nombres=[nombres]
+        self.eval()
+        #print(device)
+        self.to(device)
+        resultados=[]
+        
+        #print(">>>>>>>>>> Nombres:",nombres)
+        if remove_suffix:
+            sin_prefijos=[ pl_datamodule.remove_sufix(nombre,delimiter) for nombre in nombres]
+        else:
+            sin_prefijos=nombres
+
+        sin_prefijos=list(set(sin_prefijos))
+        
+        #print(">>>>>>>>>> sin prefijos:",sin_prefijos)
+        if self.crop_size is None:
+            transformacion=transforms.Compose([
+            transforms.Resize(self.training_size),
+            transforms.Normalize(self.normalization_dict['medias_norm'],self.normalization_dict['stds_norm'])
+        ])
+        else:
+            transformacion=transforms.Compose([
+                transforms.CenterCrop(self.crop_size),
+                transforms.Resize(self.training_size),
+                transforms.Normalize(self.normalization_dict['medias_norm'],self.normalization_dict['stds_norm'])
+            ])
+
+        for nombre in sin_prefijos:
+            #print("Processing ",nombre)
+            extension=sin_prefijos[0].split('.')[-1]
+            if extension == 'cimg':
+                x = pycimg.cimglistread_torch(nombre,self.maxvalues,channel_list=self.channel_list)
+            else:
+                print(f"   >>>>>>>>>>>>> {nombre}: Extension no contemplada")
+                continue
+
+            normalizada=[transformacion(j) for j in x] # Las vistas pueden tener distintos tamaños
+            normalizada=torch.stack(normalizada)
+            normalizada=normalizada.to(device)                            
+            nviews=len(x)
+            with torch.no_grad():
+                logits_fruto,logits_vistas=self.forward(normalizada,nviews=[nviews])
+                
+
+            probs_fruto=F.sigmoid(logits_fruto).round(decimals=3)
+            probs_vistas=F.sigmoid(logits_vistas).round(decimals=3)
+            
+                             
+            #print(">>>>>>>>>>>",probs_fruto[0,:])    
+            ims_vistas= [ v.cpu().numpy().transpose(1,2,0) for v in x]
+            
+            probsdictfruto={}
+            probsdictvistas={}
+            for i in range(self.num_classes):
+                probsdictfruto[self.class_names[i]]=int(1000*probs_fruto[0,i].item())/1000
+                kk=probs_vistas[:,i].cpu().numpy().tolist()
+                kk=[int(1000*k)/1000 for k in kk]
+                probsdictvistas[self.class_names[i]]=kk
+            resultado={'imgname':nombre,'probs_fruto':probsdictfruto,'probs_vistas' : probsdictvistas}
+            if include_images:
+                resultado['img']=ims_vistas #Lista de vistas normalizadas entre 0 y 1
+
+            resultados.append(resultado)
+            
+        return resultados

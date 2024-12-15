@@ -745,6 +745,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
         
         self.trainset =None
         self.valset = None
+        self.maxvalue=maxvalue
         if self.train_dataplaces is not None:
             self.trainset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
                                                                                     dataplaces=self.train_dataplaces, 

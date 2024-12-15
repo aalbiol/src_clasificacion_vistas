@@ -42,6 +42,7 @@ import modelos
 import pl_datamodule
 import dataset
 import json
+import pycimg
 #import wandb
 
 torch.set_printoptions(precision=3)
@@ -337,11 +338,18 @@ class ViewClassifier(pl.LightningModule):
             sin_prefijos=nombres
 
         sin_prefijos=list(set(sin_prefijos))
-        transformacion=transforms.Compose([
-            transforms.CenterCrop(self.crop_size),
+        if self.crop_size is None:
+            transformacion=transforms.Compose([
             transforms.Resize(self.training_size),
             transforms.Normalize(self.normalization_dict['medias_norm'],self.normalization_dict['stds_norm'])
         ])
+        else:
+            transformacion=transforms.Compose([
+                transforms.CenterCrop(self.crop_size),
+                transforms.Resize(self.training_size),
+                transforms.Normalize(self.normalization_dict['medias_norm'],self.normalization_dict['stds_norm'])
+            ])
+            
         if len(sin_prefijos) >1:
             for nombre in tqdm(sin_prefijos):
                 #print("Processing ",nombre)
