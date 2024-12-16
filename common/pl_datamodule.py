@@ -251,7 +251,7 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
 
 
 
-def genera_ds_jsons_multilabelMIL(root,  dataplaces, sufijos=None,maxvalue=255, defect_types=None, in_memory=True,channel_list=None):
+def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=None, in_memory=True,channel_list=None):
 
     json_files=[]
     imags_directorio=[]

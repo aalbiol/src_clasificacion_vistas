@@ -60,14 +60,14 @@ def tensor_to_serializable(obj):
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
+    # parser = ArgumentParser()
 
-    parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
+    # parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
-
-    with open(args.config,'r') as f:
+    config_file = sys.argv[1]
+    with open(config_file,'r') as f:
         config=yaml.load(f,Loader=yaml.FullLoader)
     
     

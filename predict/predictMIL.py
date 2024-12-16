@@ -69,7 +69,7 @@ if __name__ == '__main__':
     directorios=sys.argv[2:]
 
     terminaciones=config['data']['terminaciones']
-    delimiter=config['data']['delimiter']
+    
     maxvalues=config['data']['maxvalues']
 
     num_channels_in=config['model']['num_channels_input']
@@ -96,8 +96,8 @@ if __name__ == '__main__':
         listas=split_list(imagenes,10)
         for sublista in listas:
             print("sublista de ",len(sublista)," frutos")
-            resultados=model.predict(sublista,device,delimiter=delimiter,
-                                     include_images=False,remove_suffix=False)
+            resultados=model.predict(sublista,device,
+                                     include_images=False)
             for res in resultados:
                 resultados_directorio.append(res)
         res_dict={}

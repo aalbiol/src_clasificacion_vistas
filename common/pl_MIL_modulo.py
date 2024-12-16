@@ -31,7 +31,7 @@ import pycimg
 
 # Para clasificar vistas entrenando con MIL cuando anotaciones son por fruto y no por vista    
 class MILClassifier(pl.LightningModule):
-    def __init__(self, num_channels_in,
+    def __init__(self, num_channels_in=None,
                 optimizer='sgd', 
                 lr=1e-3,
                 weight_decay=1e-3,
@@ -314,7 +314,7 @@ class MILClassifier(pl.LightningModule):
     
     
     
-    def predict(self, nombres,device,delimiter="_",include_images=False,remove_suffix=True):
+    def predict(self, nombres,device,include_images=False):
         '''
         lista de nombres de imágenes de cimgs
 
@@ -331,10 +331,8 @@ class MILClassifier(pl.LightningModule):
         resultados=[]
         
         #print(">>>>>>>>>> Nombres:",nombres)
-        if remove_suffix:
-            sin_prefijos=[ pl_datamodule.remove_sufix(nombre,delimiter) for nombre in nombres]
-        else:
-            sin_prefijos=nombres
+
+        sin_prefijos=nombres
 
         sin_prefijos=list(set(sin_prefijos))
         
@@ -382,7 +380,7 @@ class MILClassifier(pl.LightningModule):
                 kk=probs_vistas[:,i].cpu().numpy().tolist()
                 kk=[int(1000*k)/1000 for k in kk]
                 probsdictvistas[self.class_names[i]]=kk
-            resultado={'imgname':nombre,'probs_fruto':probsdictfruto,'probs_vistas' : probsdictvistas}
+            resultado={'imgname':nombre,'probs_fruto':probsdictfruto,'probs_vistas' : probsdictvistas,'probs_fruto_tensor':probs_fruto[0,:],'probs_vistas_tensor':probs_vistas}
             if include_images:
                 resultado['img']=ims_vistas #Lista de vistas normalizadas entre 0 y 1
 

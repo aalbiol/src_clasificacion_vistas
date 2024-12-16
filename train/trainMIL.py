@@ -74,7 +74,7 @@ if __name__ == "__main__":
     root_folder=config['data']['root_folder']
     
     crop_size=config['data']['crop_size']
-    delimiter=config['data']['delimiter']
+    
     batch_size=config['train']['batch_size']
     in_memory=config['train']['in_memory']
     maxvalues=config['data']['maxvalues']

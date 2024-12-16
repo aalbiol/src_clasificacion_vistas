@@ -376,7 +376,7 @@ class ViewClassifier(pl.LightningModule):
                 probsdict={}
                 for i in range(self.num_classes):
                     probsdict[self.class_names[i]]=probs[0,i].item()
-                resultado={'imgname':nombre,'probs':probsdict}
+                resultado={'imgname':nombre,'probs':probsdict,'tensor_probs':probs.cpu()}
                 if include_images:
                     resultado['img']=im
 
@@ -422,18 +422,18 @@ class ViewClassifier(pl.LightningModule):
             
         return resultados
 
-    def evaluate(self, dataloader,device):
-        self.eval()
-        self.to(device)
-        self.valpreds=None
-        self.valtargets=None
-        self.valfilenames=None
-        for batch in tqdm(dataloader):
-            images = batch['images']
-            labels = batch['labels']
-            fruit_ids=batch['fruit_ids']
-            view_ids=batch['view_ids']
-            logits = self.forward(images)
+    # def evaluate(self, dataloader,device):
+    #     self.eval()
+    #     self.to(device)
+    #     self.valpreds=None
+    #     self.valtargets=None
+    #     self.valfilenames=None
+    #     for batch in tqdm(dataloader):
+    #         images = batch['images']
+    #         labels = batch['labels']
+    #         fruit_ids=batch['fruit_ids']
+    #         view_ids=batch['view_ids']
+    #         logits = self.forward(images)
     
 
 

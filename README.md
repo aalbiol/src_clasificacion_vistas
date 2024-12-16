@@ -41,7 +41,9 @@ En el fichero de configuración se especifica un directorio de salida
 * Se miden AUCS de cada tipo de defecto
 
 ```
- python ../src_clasificacion_vistas/evaluate/evaluate.py --config config/config1.yaml
+ python ../src_clasificacion_vistas/evaluate/evaluate.py  config/config1.yaml
+
+ python ../src_clasificacion_vistas/evaluate/evaluateMIL.py  config/config1.yaml
 ```
 
 # Predecir imágenes en una carpeta
