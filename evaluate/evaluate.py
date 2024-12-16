@@ -147,7 +147,7 @@ if __name__ == "__main__":
         view_id=caso['view_id']
         imags_folder=caso['imag_folder']
         view_id=os.path.join(imags_folder,view_id)
-        results=model.predict(view_id,device,delimiter=delimiter,max_value=maxvalues,terminaciones=terminaciones,include_images=False,remove_suffix=False)
+        results=model.predict(view_id,device,include_images=False,remove_suffix=False)
         result= results[0]
         #print("Result:",result) 
         #results=model.predict(image,device)
@@ -198,7 +198,7 @@ if __name__ == "__main__":
         view_id=caso['view_id']
         imags_folder=caso['imag_folder']
         view_id=os.path.join(imags_folder,view_id)
-        results=model.predict(view_id,device,delimiter=delimiter,max_value=maxvalues,terminaciones=terminaciones,include_images=False,remove_suffix=False)
+        results=model.predict(view_id,device,include_images=False,remove_suffix=False)
         result= results[0]
         #print("Result:",result) 
         #results=model.predict(image,device)

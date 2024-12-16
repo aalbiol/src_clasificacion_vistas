@@ -313,9 +313,12 @@ class ViewClassifier(pl.LightningModule):
         self.class_names=leido['class_names']
         self.training_date=leido['training_date']
         self.crop_size=leido['config']['data']['crop_size']
+        self.maxvalues=leido['config']['data']['maxvalues']     
+        self.terminaciones=leido['config']['data']['terminaciones']   
+        self.delimiter=leido['config']['data']['delimiter']
     
 
-    def predict(self, nombres,device,delimiter="_",max_value=None,terminaciones=None,include_images=False,remove_suffix=True):
+    def predict(self, nombres,device,include_images=False,remove_suffix=True):
         '''
         lista de nombres de imágenes
 
@@ -324,6 +327,10 @@ class ViewClassifier(pl.LightningModule):
         Para generar la lista de casos,
         se les quita el sufijo , por ejemplo _RGB.png usando el delimiter "_" para generar el viewid y luego se lee con 
         '''
+        max_value=self.maxvalues
+        terminaciones=self.terminaciones
+        delimiter=self.delimiter
+
         if not isinstance(nombres ,list):
             nombres=[nombres]
         self.eval()
@@ -422,18 +429,7 @@ class ViewClassifier(pl.LightningModule):
             
         return resultados
 
-    # def evaluate(self, dataloader,device):
-    #     self.eval()
-    #     self.to(device)
-    #     self.valpreds=None
-    #     self.valtargets=None
-    #     self.valfilenames=None
-    #     for batch in tqdm(dataloader):
-    #         images = batch['images']
-    #         labels = batch['labels']
-    #         fruit_ids=batch['fruit_ids']
-    #         view_ids=batch['view_ids']
-    #         logits = self.forward(images)
+
     
 
 
