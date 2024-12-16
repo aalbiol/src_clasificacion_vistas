@@ -88,6 +88,11 @@ if __name__ == '__main__':
 
     for directorio in directorios:
         print('Directorio a evaluar:',directorio)
+        directotorio_plano=directorio.replace('/','_')
+        directotorio_plano=directotorio_plano.replace("\\",'_')
+        directotorio_plano=directotorio_plano.replace('..','')
+        print('directorio_plano',directotorio_plano)
+       
         patron=os.path.join(directorio,patron_archivos)
         print('Patron:',patron)
         imagenes=glob(patron)
@@ -107,7 +112,7 @@ if __name__ == '__main__':
         # Guardar res_dict en un archivo json
         res_dict = collections.OrderedDict(sorted(res_dict.items()))
         
-        directotorio_plano=directorio.replace('/','_')
+       
         jsonname=os.path.join(reportsdir,os.path.basename(directotorio_plano)+'.json')
         print("Writing json file:",jsonname)
         with open(jsonname,'w') as f:
