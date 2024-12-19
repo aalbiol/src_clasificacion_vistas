@@ -28,3 +28,6 @@ dependencies:
     - dvc
     - dvc_gdrive
     - dvc_webdav
+    - boto3 
+    - awscli
+    - dvc_s3

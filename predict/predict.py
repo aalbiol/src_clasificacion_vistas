@@ -100,7 +100,7 @@ if __name__ == '__main__':
         listas=split_list(imagenes,10)
         for sublista in listas:
             print("sublista:",sublista)
-            resultados=model.predict(sublista,device,delimiter=delimiter,max_value=maxvalues,terminaciones=terminaciones,include_images=False)
+            resultados=model.predict(sublista,device,include_images=False)
             for res in resultados:
                 resultados_directorio.append(res)
         res_dict={}
