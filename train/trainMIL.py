@@ -95,8 +95,6 @@ if __name__ == "__main__":
     num_channels_in=config['model']['num_channels_input']
     model_version= str(config['model']['model_version'])
    
-
-
     
     print('Creating DataModule...')
     datamodule =  JSONSCImgDataModule( root_path = root_folder, 
@@ -110,6 +108,7 @@ if __name__ == "__main__":
                  normalization_stds= None,
                  max_value=maxvalues,
                  in_memory=in_memory,
+                 num_workers=config['train']['num_workers'],
                  channel_list=channel_list,augmentation=aumentacion,)
     print('... done!')
 

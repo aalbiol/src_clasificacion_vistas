@@ -307,7 +307,7 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         else:
             vistas=None
         dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 
-                     'imag_folder': imags_folder,  'max_value':maxvalue}
+                     'imag_folder': imags_folder,  'max_value':maxvalue, 'channel_list':channel_list}
         out.append(dict_fruto)     
             
     
@@ -376,11 +376,12 @@ def calcula_media_y_stds_MIL(trainset):
         vistas=caso['image']
         fruit_id=caso['fruit_id']
         maxvalue=caso['max_value']
+        channel_list=caso['channel_list']
         if vistas is None: #Cuando no está en memoria
             imags_folder=caso['imag_folder']
             nombre_cimg=os.path.join(imags_folder,fruit_id)
             nombre_cimg += ".cimg"        
-            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue) # lista de tensores normalizados en intensidad 
+            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
             
         for v in vistas:
             suma +=torch.sum(v,axis=pix_dimensions)
@@ -726,7 +727,8 @@ class JSONSCImgDataModule(pl.LightningDataModule):
 
         assert augmentation is not None    
         self.batch_size = batch_size
-        self.num_workers = num_workers if num_workers > 0 else multiprocessing.cpu_count()-1
+
+        self.num_workers = num_workers if num_workers >= 0 else multiprocessing.cpu_count()-1
         
         self.tipos_defecto=defect_types,
         self.root_path=root_path
