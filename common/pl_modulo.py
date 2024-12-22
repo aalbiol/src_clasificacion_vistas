@@ -440,33 +440,6 @@ def load_model_info(path):
         
     return model_info
 
-def print_model_info(path):
-    with open(path, 'rb') as f:
-        leido = pickle.load(f)
-    print(f' Finished Loading {path}')            
-        
-    normalization=leido['normalization_dict']
-    image_size=leido['image_size']
-    class_names=leido['class_names']
-    config=None
-    if 'config' in leido:
-        config=leido['config']
-    training_date=leido['training_date']
-    final_val_aucs=leido['final_val_aucs']
-    print("normalization: ",normalization)
-    print("image_size: ",image_size)
-    print("class_names: ",class_names)
-    print("training_date: ",training_date)
-    print("final_val_aucs: ",final_val_aucs)
 
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
-    if config is not None:
-        if 'evaluate' in config:
-            del config['evaluate']
-        if 'predict' in config:
-            del config['predict']   
-        config_string=json.dumps(config,indent=3)
-        print("config", config_string)
-    print(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>")
 
        
