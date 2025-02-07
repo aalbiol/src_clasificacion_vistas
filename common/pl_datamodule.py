@@ -251,7 +251,7 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
 
 
 
-def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=None, in_memory=True,channel_list=None):
+def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=None, in_memory=True,channel_list=None,terminacion='.cimg'):
 
     json_files=[]
     imags_directorio=[]
@@ -301,9 +301,18 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         # json_sin_ext_sin_dir=os.path.basename(json_sin_ext)
         # fruit_id=json_sin_ext_sin_dir
         if in_memory:
-            nombre_cimg=os.path.join(imags_folder,fruitid)
-            nombre_cimg += ".cimg"        
-            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
+            nombre_img=os.path.join(imags_folder,fruitid)
+            nombre_img += terminacion
+            if "cimg" in terminacion:
+                #Aqui channel_list es una lista de enteros
+                vistas = pycimg.cimglistread_torch(nombre_img,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
+            elif "npz" in terminacion:
+                #Aqui channel_list es una lista de strings
+                vistas = pycimg.npzread_torch(nombre_img,jsonfile,channel_list=channel_list)
+            else:
+                vistas=None
+                print(f"ERROR en genera_ds_jsons_multilabelMIL: terminacion '{terminacion}' no reconocida")
+                sys.exit(1)
         else:
             vistas=None
         dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 
@@ -704,7 +713,7 @@ class ViewDataModule(pl.LightningDataModule):
 
 
 
-## Cuando las vistas de un fruto están almacenadas en CIMGLists y las anotaciones en JSONS arandanos
+## Cuando las vistas de un fruto están almacenadas en CIMGLists o npz y las anotaciones en JSONS 
 class JSONSCImgDataModule(pl.LightningDataModule):
     def __init__(self, 
                  root_path=None,
@@ -722,6 +731,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
                 crop_size=None,
                 channel_list=[0,1,2],
                 augmentation=None,
+                terminacion='.npz',
                   **kwargs):
         super().__init__()
 
@@ -748,20 +758,23 @@ class JSONSCImgDataModule(pl.LightningDataModule):
         self.trainset =None
         self.valset = None
         self.maxvalue=maxvalue
+        self.terminacion=terminacion
         if self.train_dataplaces is not None:
             self.trainset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
                                                                                     dataplaces=self.train_dataplaces, 
                                                                                     maxvalue=maxvalue,
                                                                                     defect_types=defect_types,
                                                                                     in_memory=in_memory,
-                                                                                    channel_list=self.channel_list)
+                                                                                    channel_list=self.channel_list,
+                                                                                    terminacion=terminacion)
  
         if self.val_dataplaces is not None:
             self.valset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
                                                                                     dataplaces=self.val_dataplaces, 
                                                                                     maxvalue=maxvalue,
                                                                                     defect_types=defect_types,in_memory=in_memory,
-                                                                                    channel_list=self.channel_list)
+                                                                                    channel_list=self.channel_list,
+                                                                                    terminacion=terminacion)
         
         if self.medias_norm is None or self.stds_norm is None:
             print('\n *** INFO: Estimando medias y varianzas normalizacion')
@@ -830,10 +843,10 @@ class JSONSCImgDataModule(pl.LightningDataModule):
         self.numlabels=len(self.tipos_defecto)           
 
         if self.train_dataplaces is not None:
-                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list)  
+                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list,terminacion=self.terminacion)  
                 
         if self.val_dataplaces is not None:            
-            self.val_dataset=CImgListDataSet(dataset=self.valset,transform=transform_val,channel_list=self.channel_list)
+            self.val_dataset=CImgListDataSet(dataset=self.valset,transform=transform_val,channel_list=self.channel_list,terminacion=self.terminacion)
 
             
         print(f"JSONSCImgDataModule num labels = {self.numlabels}")

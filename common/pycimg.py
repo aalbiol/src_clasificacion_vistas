@@ -4,6 +4,7 @@ import zlib
 import os
 from PIL import Image
 import torch
+import json
 
 typesDict={'float':'float32' ,'double':'float64',
 'unsigned_short':'uint16','unsigned_char':'uint8',
@@ -171,3 +172,80 @@ def cimglistread_torch(filename,max_value,channel_list=None):
 
     
     return tensores
+
+
+def npzread_torch(nombre_img,nombre_json,channel_list):
+    ''' Lee un npz y devuelve una lista de tensores
+    de tipo float32
+     normalizado por max_value
+    Los ejes en el orden (color,fila,columna)'''
+    npz_file = np.load(nombre_img)
+
+    with open(nombre_json) as f:
+        data=json.load(f)
+
+    channels=data['channels'].split(';')
+    #print(channels)
+    channels_dict={}
+    for c,v in enumerate(channels):
+        channels_dict[v]=c
+    print(channels_dict)
+    
+    maxvalue=data['maxValChannels']
+
+
+# List the keys (names of the arrays inside the .npz file)
+    #print("Arrays in the .npz file:", len(npz_file.files), npz_file.files)
+
+    num_vistas = len(npz_file.files)
+    num_planos = npz_file[npz_file.files[0]].shape[0]
+
+    vistas=[]
+
+    for view in npz_file:
+        vista_allchannels=npz_file[view]
+        lista_canales=[]
+        for channel in channel_list:
+            channel_idx=channels_dict[channel]
+            canal=vista_allchannels[channel_idx]
+            lista_canales.append(canal)
+        vista=np.stack(lista_canales,axis=0)
+        vista=vista.astype(np.float32)/maxvalue
+        vista=torch.from_numpy(vista)
+        
+        vistas.append(vista)
+    return vistas
+    
+
+def npzread_auxB1(nombre_img,nombre_json):
+    ''' Lee un npz y devuelve una lista de tensores
+    de tipo in16
+     
+    con la mascara auxB1'''
+    npz_file = np.load(nombre_img)
+
+    with open(nombre_json) as f:
+        data=json.load(f)
+
+    channels=data['channels'].split(';')
+    #print(channels)
+    channels_dict={}
+    for c,v in enumerate(channels):
+        channels_dict[v]=c
+    
+    auxb1idx=channels_dict['AuxB1']
+    
+    
+
+    vistas=[]
+
+    for view in npz_file:
+        vista_allchannels=npz_file[view]
+        lista_canales=[]
+
+        canal=vista_allchannels[auxb1idx]        
+        vista=torch.from_numpy(canal)
+        
+        vistas.append(vista)
+    return vistas
+    

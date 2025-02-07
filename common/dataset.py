@@ -112,12 +112,13 @@ class ViewsDataSet(Dataset):
 
  
 class CImgListDataSet(Dataset):
-    def __init__(self,dataset=None , transform=None, channel_list=None, *args, **kwargs):
+    def __init__(self,dataset=None , transform=None, channel_list=None, terminacion=".cimg", *args, **kwargs):
         super().__init__(*args,  **kwargs)
         
         self.dataset=dataset   
         self.transform = transform
         self.channel_list=channel_list
+        self.terminacion=terminacion
         
 
         
@@ -134,10 +135,20 @@ class CImgListDataSet(Dataset):
         if target.isnan().sum() >0:
             print("\n\n******Imagen ", fruit_id, "labels:",target )
         if vistas is None: #Cuando no está en memoria
-            nombre_cimg=os.path.join(imags_folder,fruit_id)
-            nombre_cimg += ".cimg" 
-            assert os.path.exists(nombre_cimg), f'No existe el archivo {nombre_cimg}'       
-            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=self.channel_list) # lista de tensores normalizados en intensidad 
+            nombre_img=os.path.join(imags_folder,fruit_id)
+            nombre_img += self.terminacion
+            jsonfile=nombre_img.replace(self.terminacion,".json")
+            assert os.path.exists(nombre_img), f'No existe el archivo {nombre_img}'       
+            if "cimg" in self.terminacion:
+                    #Aqui channel_list es una lista de enteros
+                    vistas = pycimg.cimglistread_torch(nombre_img,maxvalue,channel_list=self.channel_list) # lista de tensores normalizados en intensidad 
+            elif "npz" in self.terminacion:
+                    #Aqui channel_list es una lista de strings
+                vistas = pycimg.npzread_torch(nombre_img,jsonfile,channel_list=self.channel_list)
+            else:
+                vistas=None
+                print(f"ERROR en genera_ds_jsons_multilabelMIL: terminacion '{terminacion}' no reconocida")
+                sys.exit(1)
             #Tamaños diferentes
         
         assert vistas is not None, f'No se ha podido cargar la imagen {fruit_id} Type Vistas: {type(vistas)}'

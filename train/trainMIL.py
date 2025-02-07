@@ -70,7 +70,7 @@ if __name__ == "__main__":
 
     train_dataplaces = config['data']['train']
     val_dataplaces = config['data']['val']
-    terminaciones=config['data']['terminaciones']
+    terminacion=config['data']['terminaciones']
     root_folder=config['data']['root_folder']
     
     crop_size=config['data']['crop_size']
@@ -109,7 +109,9 @@ if __name__ == "__main__":
                  max_value=maxvalues,
                  in_memory=in_memory,
                  num_workers=config['train']['num_workers'],
-                 channel_list=channel_list,augmentation=aumentacion,)
+                 channel_list=channel_list,
+                 augmentation=aumentacion,
+                 terminacion=terminacion)
     print('... done!')
 
   # Output

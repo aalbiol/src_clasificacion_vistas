@@ -1,0 +1,13 @@
+{
+"batchName": "Name",
+"batchType": "Type",
+"batchOrigin": "Origin",
+"channels": "H;S;I;NIR;UV;R;G;B;AuxB1",
+"maxValChannels": 1023,
+"annotations": {
+},
+"files": {
+"1": "obj1.png",
+"2": "obj1.npz"
+}
+}
