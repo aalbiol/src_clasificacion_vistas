@@ -300,9 +300,10 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         # json_sin_ext=os.path.splitext(jsonfile)[0]
         # json_sin_ext_sin_dir=os.path.basename(json_sin_ext)
         # fruit_id=json_sin_ext_sin_dir
+        nombre_img=os.path.join(imags_folder,fruitid)
+        nombre_img += terminacion        
         if in_memory:
-            nombre_img=os.path.join(imags_folder,fruitid)
-            nombre_img += terminacion
+
             if "cimg" in terminacion:
                 #Aqui channel_list es una lista de enteros
                 vistas = pycimg.cimglistread_torch(nombre_img,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
@@ -316,7 +317,8 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         else:
             vistas=None
         dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 
-                     'imag_folder': imags_folder,  'max_value':maxvalue, 'channel_list':channel_list}
+                     'imag_folder': imags_folder,  'json_file_full_path': jsonfile,'image_file_full_path':nombre_img,
+                     'max_value':maxvalue, 'channel_list':channel_list}
         out.append(dict_fruto)     
             
     

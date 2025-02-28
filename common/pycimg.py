@@ -174,24 +174,32 @@ def cimglistread_torch(filename,max_value,channel_list=None):
     return tensores
 
 
-def npzread_torch(nombre_img,nombre_json,channel_list):
+def npzread_torch(nombre_img,nombre_json=None,maxval=None,channel_list=None):
     ''' Lee un npz y devuelve una lista de tensores
     de tipo float32
      normalizado por max_value
     Los ejes en el orden (color,fila,columna)'''
     npz_file = np.load(nombre_img)
-
-    with open(nombre_json) as f:
-        data=json.load(f)
-
-    channels=data['channels'].split(';')
+    maxvalue = None
+    channels = None
+    if nombre_json is not None:
+        with open(nombre_json) as f:
+            data=json.load(f)
+        print(data)
+        channels=data['channels'].split(';')
+        maxvalue=data['maxValChannels']
+    else:
+        maxvalue=maxval
+        channels=channel_list
+    assert channels is not None
+    assert maxvalue is not None
     #print(channels)
     channels_dict={}
     for c,v in enumerate(channels):
         channels_dict[v]=c
     print(channels_dict)
     
-    maxvalue=data['maxValChannels']
+    
 
 
 # List the keys (names of the arrays inside the .npz file)
@@ -248,4 +256,15 @@ def npzread_auxB1(nombre_img,nombre_json):
         
         vistas.append(vista)
     return vistas
+
+
+def torch2npz(lista_tensores,nombrenpz,maxval=1023):
+    ''' Guarda una lista de tensores en un npz
+    normalizando por maxval'''
+    lista_npys=[]
+    for tensor in lista_tensores:
+        tensor *=maxval
+        npy=tensor.numpy().astype(np.uint16)
+        lista_npys.append(npy)
+    np.savez(nombrenpz,*lista_npys)
     

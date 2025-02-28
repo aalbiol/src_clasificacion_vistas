@@ -45,7 +45,7 @@ from torch.utils.data import DataLoader
 from torchvision import transforms
 from pathlib import Path
 from metrics import calculate_auc_multilabel
-from pl_MIL_modulo import MILClassifier
+from pl_patch_MIL_modulo import PatchMILClassifier
 
 from datetime import datetime
 
@@ -88,6 +88,7 @@ if __name__ == "__main__":
     train_dataplaces = config['data']['train']
     val_dataplaces = config['data']['val']
     terminaciones=config['data']['terminaciones']
+    print("Terminaciones:",terminaciones)
     root_folder=config['data']['root_folder']
     
     crop_size=config['data']['crop_size']
@@ -119,15 +120,14 @@ if __name__ == "__main__":
 
     model_path=os.path.join(model_dir,model_file)
     
-    model = MILClassifier()
+    model = PatchMILClassifier()
     model.load(model_path)
     device=torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print("\n** Device:",device)
+    print("\n")
     
     training_date=str(model.training_date)
-    channel_list=model.channel_list
-
-
-    print("Channel list:",channel_list) 
+    
     print("\n\n====================================================================")
     print("  ******************** TRAINING SET *************************")
     print("====================================================================")        
@@ -151,12 +151,12 @@ if __name__ == "__main__":
         fruit_id=caso['fruit_id']
         #view_id=caso['view_id']
         imags_folder=caso['imag_folder']
-
         json_file=caso['json_file_full_path']
+        print("Main Json file:",json_file)
         #view_id=os.path.join(imags_folder,view_id)
         nombre_cimg=caso['image_file_full_path']
-        
         results=model.predict(nombre_cimg,device,include_images=False,json_file=json_file)
+
         result= results[0] #introducimos los frutos de 1 en 1
         #print("Result:",result) 
         #results=model.predict(image,device)
@@ -200,7 +200,6 @@ if __name__ == "__main__":
     #print('val_dataplaces:',train_dataplaces) 
     dataset,tipos_defecto=pl_datamodule.genera_ds_jsons_multilabelMIL(root_folder,  val_dataplaces, maxvalue=maxvalues, defect_types=tipos_defecto, 
                                                                       terminacion=terminaciones,in_memory=False,channel_list=model.channel_list)
-
     print("Val dataset:",len(dataset))
     class_results=[]
     for caso in tqdm(dataset):

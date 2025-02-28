@@ -12,6 +12,7 @@ class ResNet(nn.Module):
         capas=list(model.children())
         cap=capas[:-1]
         self.features=nn.Sequential(*cap)
+        #features incluye hasta el avgpool inclusive
         
         self.dropout=nn.Dropout(p=p_dropout)
         num_features =capas[-1].in_features
@@ -29,6 +30,8 @@ class ResNet(nn.Module):
     
 
 class ResNetMIL(nn.Module):
+    ''' Otra forma de tener la misma estructura de red
+    '''
     def __init__(self, model, num_channels_in, num_classes, p_dropout=0.5):
         super(ResNetMIL, self).__init__()
         
@@ -77,6 +80,51 @@ class ResNetMIL(nn.Module):
         return self.classifier(f)
 
 
+class ResNetPatchMIL(nn.Module):
+    '''
+    Devuelve una imagencita de baja resolución
+    Cambia el avgpool + linear por un una convolución 1x1 como clasificador
+    '''
+    def __init__(self, model, num_channels_in,num_classes, p_dropout=0.5):
+        super(ResNetPatchMIL, self).__init__()
+
+        print('Resnet Num channels_in:',num_channels_in)
+        self.num_channels_in=num_channels_in
+        self.conditioner=None
+        if self.num_channels_in !=3:
+            self.conditioner=nn.Conv2d(num_channels_in, 3, kernel_size=1, stride=1, padding=0, bias=False)
+        
+        self.features = nn.Sequential( OrderedDict([
+            ('conv1', model.conv1),
+            ('bn1',model.bn1),
+            ('relu', model.relu),
+            ('maxpool',model.maxpool),
+            ('layer1',model.layer1),
+            ('layer2',model.layer2),
+            ('layer3',model.layer3),
+            ('layer4',model.layer4),
+            ]))
+        
+        # classification layer
+        self.dropout=nn.Dropout(p=p_dropout)
+        num_features = self.features.layer4[2].conv3.out_channels
+
+        
+        self.classifier = nn.Sequential(
+            nn.Conv2d(num_features,num_classes, kernel_size=1, stride=1, padding=0, bias=True),
+            )
+
+        
+    def forward(self,x):
+        if self.num_channels_in !=3:
+            y= self.conditioner(x)
+        else:
+            y=x
+        f=self.features(y)
+        f=self.dropout(f)
+        return self.classifier(f)
+    
+
 
 def resnet50(num_channels_in, num_classes, pretrained=True,tune_fc_only=False,p_dropout=0.5):
     model = models.resnet50(pretrained)
@@ -85,4 +133,21 @@ def resnet50(num_channels_in, num_classes, pretrained=True,tune_fc_only=False,p_
 def resnet50MIL(num_channels_in, num_classes, pretrained=True,p_dropout=0.5):
     model = models.resnet50(pretrained)
     return ResNetMIL(model, num_channels_in,num_classes,p_dropout=p_dropout)
+
+
+def resnet18PatchMIL(num_channels_in,num_classes, p_dropout=0.5):
+    model = models.resnet18(weights=models.ResNet18_Weights)
+    return ResNetPatchMIL(model, num_channels_in,num_classes,p_dropout=p_dropout)
+
+def resnet34PatchMIL(num_channels_in,num_classes, p_dropout=0.5):
+    model = models.resnet34(weights=models.ResNet34_Weights)
+    return ResNetPatchMIL(model, num_channels_in,num_classes,p_dropout=p_dropout)
+
+def resnet50PatchMIL(num_channels_in,num_classes, p_dropout=0.5):
+    model = models.resnet50(weights=models.ResNet50_Weights)
+    return ResNetPatchMIL(model, num_channels_in,num_classes,p_dropout=p_dropout)
+
+def resnet101PatchMIL(num_channels_in,num_classes, p_dropout=0.5):
+    model = models.resnet101(weights=models.ResNet101_Weights)
+    return ResNetPatchMIL(model, num_channels_in,num_classes,p_dropout=p_dropout)
 

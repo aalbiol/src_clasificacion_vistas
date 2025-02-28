@@ -235,13 +235,7 @@ class MILClassifier(pl.LightningModule):
         return preds_class,paths    
     
     
-    def on_validation_epoch_end(self, ) -> None:
-        
-
-        
-        self.valtargets = self.valtargets.int()
-        
-
+    def on_validation_epoch_end(self, ) -> None:     
         
         if self.valpreds is not None:
         #Calcular AUC
@@ -314,7 +308,7 @@ class MILClassifier(pl.LightningModule):
     
     
     
-    def predict(self, nombres,device,include_images=False):
+    def predict(self, nombres,device,include_images=False,json_file=None):
         '''
         lista de nombres de imágenes de cimgs
 
@@ -354,6 +348,9 @@ class MILClassifier(pl.LightningModule):
             extension=sin_prefijos[0].split('.')[-1]
             if extension == 'cimg':
                 x = pycimg.cimglistread_torch(nombre,self.maxvalues,channel_list=self.channel_list)
+            elif extension == 'npz':
+                assert json_file is not None
+                x = pycimg.npzread_torch(nombre,json_file,channel_list=self.channel_list)
             else:
                 print(f"   >>>>>>>>>>>>> {nombre}: Extension no contemplada")
                 continue
