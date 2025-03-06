@@ -119,7 +119,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
     
     Util para clases muy desbalanceadas
     '''
-    def __init__(self,dataset):
+    def __init__(self,dataset,class_names):
         print ('>>>>>>>>>>>>>>>>< Sampler init Type Dataset:', type(dataset))
         matriz_casos=get_matriz_casos(dataset)
         estadistica_clase=get_class_distribution(matriz_casos)
@@ -131,6 +131,7 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
         lista= get_class_items(matriz_casos,-1)
         self.listas.append(lista)
         self.lengths.append(len(lista))
+        self.class_names=class_names
         
         for k in tqdm(range(num_clases)): 
             #print('Populating class:',k)
@@ -144,7 +145,10 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
         print('Sampler len=',self.len) 
 
         for count,l in enumerate(self.listas):
-            print(f'  ** Length Lista {count}: {len(l)}')
+            if count ==0:
+                print(f'  ** Length Lista sin defecto : {len(l)}')
+            else:
+                print(f'  ** Length Lista {self.class_names[count-1]} : {len(l)}')
 
                 
    

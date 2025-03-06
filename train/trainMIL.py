@@ -144,8 +144,10 @@ if __name__ == "__main__":
             
     # Continuar entrenamiento a partir de un punto
     if config['train']['initial_model'] is not None:
-        checkpoint = torch.load(config['initial_model'])
-        model.load_state_dict(checkpoint['state_dict'])
+        print("Loading initial model...", config['train']['initial_model'])
+        model.load(config['train']['initial_model'])
+        # checkpoint = torch.load(config['train']['initial_model'])
+        # model.load_state_dict(checkpoint['state_dict'])
 
 
     # Instantiate lightning trainer and train model

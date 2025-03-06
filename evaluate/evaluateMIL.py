@@ -169,7 +169,7 @@ if __name__ == "__main__":
             targets_dict[tipos_defecto[nclase]]=int(targets[nclase].item())
 
         json_data.append({'filename': result['imgname'],
-                            'scores':result['probs_fruto'],
+                            'scores':result['probs_fruto'],'probs_vistas':result['probs_vistas'],
                             'ground_truth': targets_dict})
                         
 
@@ -225,7 +225,7 @@ if __name__ == "__main__":
             targets_dict[tipos_defecto[nclase]]=int(targets[nclase].item())
 
         json_data.append({'filename': result['imgname'],
-                            'scores':result['probs_fruto'],
+                            'scores':result['probs_fruto'],'probs_vistas':result['probs_vistas'],
                             'ground_truth': targets_dict})
                         
 

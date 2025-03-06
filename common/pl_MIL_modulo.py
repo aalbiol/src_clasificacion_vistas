@@ -40,7 +40,6 @@ class MILClassifier(pl.LightningModule):
                 warmup_iter=0,
                 label_smoothing=0.01,
                 p_dropout=0.5,
-                positive_factor=0.1,
                 normalization_dict=None,
                 training_size=None):
         super().__init__()
@@ -98,7 +97,25 @@ class MILClassifier(pl.LightningModule):
         self.valtargets=None
         self.valfilenames=None
         self.estadisticas_labels = None
-        self.positive_factor=positive_factor
+
+    def vistas2fruit(self, logits_vistas, nviews,labels):
+        logits_fruits = torch.split(logits_vistas, nviews) # Esto es una lista 
+        logits_fruit=[] # Lista de los logits de la vista critica de cada fruto. Al final, tantos elementos como frutos
+        for fruit_idx,logits in enumerate(logits_fruits):
+            # logits matriz de cada uno de los frutos de nvistas x nclases
+            nvistas,nclasses=logits.shape
+            logits_clases=[]
+            for c in range(nclasses):
+                if labels[fruit_idx,c]>0.5:
+                    logits_clases.append(logits[:,c].max(axis=0,keepdim=False)[0])
+                else:
+                    logits_clases.append(logits[:,c].mean(axis=0,keepdim=False))
+            logits_clases=torch.stack(logits_clases)
+            logits_fruit.append(logits_clases)
+        logits_fruit = torch.stack(logits_fruit)
+        return logits_fruit
+
+            
 
     def forward(self, X, nviews):
         '''
@@ -121,7 +138,7 @@ class MILClassifier(pl.LightningModule):
         
 
         logits_fruit=[] # Lista de los logits de la vista critica de cada fruto. Al final, tantos elementos como frutos
-        for logits in logits_fruits:           
+        for logits in logits_fruits:         
             logits_fruit.append(logits.max(axis=0,keepdim=True)[0])
 
          
@@ -137,13 +154,15 @@ class MILClassifier(pl.LightningModule):
             
             
         else:  
-            pos_weight = self.positive_factor     
+            pos_weight = self.pos_weights     
         
         smoothed_labels=(1-self.label_smoothing)*labels + self.label_smoothing/2
                     
-        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean',pos_weight=self.pos_weights)
+        #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean',pos_weight=pos_weight)
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
         # print('logit.shape:',logits.shape)
         # print('smoothed_labels.shape:',smoothed_labels.shape)
+        #   print(">>>>>>>>>>>>smoothed labels:", smoothed_labels)
         loss=binaryLoss(logits,smoothed_labels)
         
         if torch.isnan(loss):
@@ -184,6 +203,8 @@ class MILClassifier(pl.LightningModule):
 
         
         logits_fruto,logits_vistas = self(images, nviews) #logits de fruto
+
+        #logits_fruto=self.vistas2fruit(logits_vistas,nviews,labels)
 
         loss = self.criterion(logits_fruto, labels)
         # perform logging
@@ -259,7 +280,7 @@ class MILClassifier(pl.LightningModule):
                 medias=torch.nanmean(self.estadisticas_labels,dim=0)
                 self.pos_weights=(1-medias)/medias
                 self.estadisticas_labels=None
-        #print("self.pos_weights: ",self.pos_weights )
+        print("self.pos_weights: ",self.pos_weights )
         self.epoch_counter += 1
             
 

@@ -701,7 +701,7 @@ class ViewDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         print("batch_size in Dataloader train", self.batch_size)
-        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset)
+        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset,self.defect_types)
         return DataLoader(self.train_dataset, batch_size=self.batch_size,  sampler = misampler,  num_workers=self.num_workers, collate_fn=my_collate_fn)
         
     def val_dataloader(self):
@@ -873,7 +873,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
      
     def train_dataloader(self):
         print("batch_size in Dataloader train", self.batch_size)
-        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset)   
+        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset,self.tipos_defecto)   
         #return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, collate_fn=my_collate_fn)
         return DataLoader(self.train_dataset, batch_size=self.batch_size, sampler=misampler, num_workers=self.num_workers, collate_fn=my_collate_fn_MIL)
 

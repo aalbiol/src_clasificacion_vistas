@@ -185,7 +185,7 @@ def npzread_torch(nombre_img,nombre_json=None,maxval=None,channel_list=None):
     if nombre_json is not None:
         with open(nombre_json) as f:
             data=json.load(f)
-        print(data)
+        #print(data)
         channels=data['channels'].split(';')
         maxvalue=data['maxValChannels']
     else:
@@ -197,7 +197,7 @@ def npzread_torch(nombre_img,nombre_json=None,maxval=None,channel_list=None):
     channels_dict={}
     for c,v in enumerate(channels):
         channels_dict[v]=c
-    print(channels_dict)
+    #print(channels_dict)
     
     
 
