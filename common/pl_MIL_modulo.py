@@ -158,8 +158,8 @@ class MILClassifier(pl.LightningModule):
         
         smoothed_labels=(1-self.label_smoothing)*labels + self.label_smoothing/2
                     
-        #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean',pos_weight=pos_weight)
-        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean',pos_weight=pos_weight)
+        #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
         # print('logit.shape:',logits.shape)
         # print('smoothed_labels.shape:',smoothed_labels.shape)
         #   print(">>>>>>>>>>>>smoothed labels:", smoothed_labels)
@@ -280,7 +280,7 @@ class MILClassifier(pl.LightningModule):
                 medias=torch.nanmean(self.estadisticas_labels,dim=0)
                 self.pos_weights=(1-medias)/medias
                 self.estadisticas_labels=None
-        print("self.pos_weights: ",self.pos_weights )
+        
         self.epoch_counter += 1
             
 
