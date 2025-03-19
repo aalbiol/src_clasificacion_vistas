@@ -138,7 +138,8 @@ if __name__ == "__main__":
                             label_smoothing=config['train']['label_smoothing'],
                             weight_decay=config['train']['weights_decay'],
                             normalization_dict=dict_norm,
-                            training_size=training_size,)
+                            training_size=training_size,
+                            config=config,)
     
     
             
@@ -162,7 +163,7 @@ if __name__ == "__main__":
     print('num_epochs:',num_epochs)
     
 
-    callbacks3=[FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['train']['unfreeze_epoch'],initial_denom_lr=2),]
+    callbacks3=[lr_monitor,FeatureExtractorFreezeUnfreeze(unfreeze_at_epoch=config['train']['unfreeze_epoch'],initial_denom_lr=2),]
     
     trainer = pl.Trainer(callbacks=callbacks3,**trainer_args)
     

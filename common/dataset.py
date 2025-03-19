@@ -34,9 +34,10 @@ def lee_png16(filename,max_value):
     return im
 
 
-def lee_vista(images_folder,view_id,terminaciones,max_value,carga_mask=True):
-    #print("Reading ", view_id)
-    nombre_base=os.path.join(images_folder,view_id)
+def lee_vista(images_folder,view_idd,terminaciones,max_value,carga_mask=True):
+    print("Reading ", view_idd,images_folder)
+    print("Maxvalues:",max_value)
+    nombre_base=os.path.join(images_folder,view_idd)
     canales=[]
 
     assert isinstance(max_value,list), 'maxvalue tiene que ser una lista de tantos elementos como canales o una lista con un unico elemento que se emplea para todos los canales'
@@ -163,6 +164,6 @@ class CImgListDataSet(Dataset):
         vistas_transformed=torch.stack(vistas_transformed,axis=0)                    
         return vistas_transformed,target,fruit_id,imags_folder
     def __get_target__(self, index: int) -> Any:
-        return self.dataset[index]['labels'] 
+        return self.dataset[index]['labels_fruit'] 
     def __len__(self) -> int:
         return len(self.dataset)

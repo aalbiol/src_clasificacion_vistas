@@ -46,7 +46,8 @@ class PatchMILClassifier(pl.LightningModule):
                 label_smoothing=0.05,
                 p_dropout=0.5,
                 normalization_dict=None,
-                training_size=None):
+                training_size=None,
+                config=None):
         super().__init__()
 
 
@@ -69,6 +70,7 @@ class PatchMILClassifier(pl.LightningModule):
 
 
         self.optimizer_name =optimizer
+        self.config=config
 
         self.epoch_counter=1
         self.estadisticas_labels=None
@@ -79,19 +81,38 @@ class PatchMILClassifier(pl.LightningModule):
         self.valtargets=None
         self.valfilenames=None
         resnet_version = model_version
+
+        if config is not None:
+            if 'focal_loss_gamma' in config['train']:
+                print("Using focal loss gamma=",config['train']['focal_loss_gamma'])
+                self.focal_loss_gamma=config['train']['focal_loss_gamma']
+            else:
+                self.focal_loss_gamma=None
+            
+            if 'focal_loss_alpha' in config['train']:
+                self.focal_loss_alpha=config['train']['focal_loss_alpha']
+            else:
+                self.focal_loss_alpha=None
+        
         self.resnet_version = resnet_version
+
+
+
         print("Resnet Version: ",resnet_version,type(resnet_version))
 
         if resnet_version is None or self.class_names is None:
             return
-        if resnet_version == 50:
+        if resnet_version == 50 or resnet_version =="50":
             self.modelo=modelos.resnet50PatchMIL(num_channels_in,num_classes=self.num_classes,  p_dropout=self.p_dropout)               
-        elif resnet_version == 18:
+        elif resnet_version == 18 or resnet_version =="18":
             self.modelo=modelos.resnet18PatchMIL(num_channels_in,num_classes=self.num_classes,p_dropout=self.p_dropout)
-        elif resnet_version == 34:
+        elif resnet_version == 34 or resnet_version =="34":
             self.modelo=modelos.resnet34PatchMIL(num_channels_in,num_classes=self.num_classes,p_dropout=self.p_dropout)
-        elif resnet_version == 101:
+        elif resnet_version == 101 or resnet_version =="101":
             self.modelo=modelos.resnet101PatchMIL(num_channels_in,num_classes=self.num_classes,p_dropout=self.p_dropout)
+        elif model_version=="vit_16":
+                self.modelo=modelos.VitPatch(tipo=model_version,
+                                              num_channels_in=num_channels_in, num_classes=self.num_classes)              
                                 
         else:
             print(f"\n***** Warning. Version resnet solicitada {resnet_version} no contemplada. Usando resnet18")
@@ -134,10 +155,65 @@ class PatchMILClassifier(pl.LightningModule):
         logits_fruit = torch.concat(logits_fruit,axis = 0)            
         return logits_patches,logits_view,logits_fruit
 
+    
+    def criterion(self, logits, labels): 
+        
+        # Gamma del focal loss va disminuyendo a medida que avanza el entrenamiento gamma annealing
+        num_epochs=self.config['train']['epochs'] 
+        num_epochs23=num_epochs*2/3
+        
+        gamma=self.focal_loss_gamma*(1-(self.epoch_counter-1)/num_epochs23)
+        gamma=max(gamma,0)
+        gamma=self.focal_loss_gamma
+
+        if self.focal_loss_alpha is not None:
+            loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=gamma)
+            # print("Logits:",logits)
+            # print("Labels:",labels)
+            #print("Focal Loss:",loss)
+            return loss,loss,loss                         
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='none')
+        #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+        # print('logit.shape:',logits.shape)
+        # print('smoothed_labels.shape:',smoothed_labels.shape)
+        #   print(">>>>>>>>>>>>smoothed labels:", smoothed_labels)
+        losses=binaryLoss(logits,labels)
+        
+        losses_cols=[]
+        pos_losses_col=[]
+        neg_losses_col=[]
+        for col in range(labels.shape[1]):
+            labels_col=labels[:,col]
+            losses_col=losses[:,col]
+            pos_loss_col=losses_col[labels_col>0.5].mean()
+            neg_loss_col=losses_col[labels_col<0.5].mean()
+            pos_losses_col.append(pos_loss_col)
+            neg_losses_col.append(neg_loss_col)
+            loss_col=(pos_loss_col+neg_loss_col)/2
+            losses_cols.append(loss_col)
+        loss=torch.stack(losses_cols).mean()
+        loss_pos=torch.stack(pos_losses_col).mean()
+        loss_neg=torch.stack(neg_losses_col).mean()
+        
+        
+        
+        if torch.isnan(loss):            
+            print ('\nNAN Loss Logits:',logits, " labels:", labels, 'epoch:', self.epoch_counter)
+            print("NAN Losses:",loss,losses_cols)
+        return loss,loss_pos,loss_neg
+    
+    def criterionval(self, logits, labels):  
+        if self.focal_loss_alpha is not None:
+            loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=self.focal_loss_gamma)
+            return loss                                   
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+        loss=binaryLoss(logits,labels)
+        return loss
+    
 
 
 
-    def criterion(self, logits_fruits, labels):
+    def criterion_old(self, logits_fruits, labels):
         '''labels lista con batch_size elementos
         Cada elemento tiene tantos elementos como etiquetas tenga la vista
         logits (batch_size,num_classes) '''
@@ -179,15 +255,61 @@ class PatchMILClassifier(pl.LightningModule):
         else:
             print(f'**** WARNING : Optimizer configured to {self.optimizer_name}. Falling back to SGD')
             optimizer = SGD(parameters, lr=self.lr, weight_decay=self.weight_decay)
-                
-        
+        num_epochs=self.config['train']['epochs']           
+        gamma=0.2**(1/num_epochs)    
         if self.warmup_iter > 0:           
             warmup_lr_scheduler = LinearLR(optimizer, start_factor=0.1, total_iters=self.warmup_iter)
-            schedulers = [warmup_lr_scheduler, ExponentialLR(optimizer, gamma=0.99) ]
+            schedulers = [warmup_lr_scheduler, ExponentialLR(optimizer, gamma=gamma) ]
         else:
-           schedulers = [ ExponentialLR(optimizer, gamma=0.99) ] 
+           schedulers = [ ExponentialLR(optimizer, gamma=gamma) ] 
         return [optimizer],schedulers
 
+    def criterion_patches(self, logits_patches, labels,nviews):
+        nbatch,nclases,nfilas,ncolumnas=logits_patches.shape
+        ngroups=len(nviews)
+        ngroups2,nclases2=labels.shape
+        
+        assert ngroups==ngroups2
+        assert nclases==nclases2
+        
+        split_logits=torch.split(logits_patches,nviews,dim=0)
+        
+
+        pos_losses=[]
+        neg_losses=[]
+        #print("labels.device:",labels.device)
+        #print("logits_patches.device:",logits_patches.device) 
+        
+        print("\n\n***************************************************")
+        print("Labels:",labels.shape)
+        print("Logits:",logits_patches.shape)
+        print("nviews",nviews)
+        for g in range(ngroups):
+            logits_group=split_logits[g]
+            labels_group=labels[g]
+            print(g,"Labels Group:",labels_group.shape)
+            print(g,"Logits Group:",logits_group.shape)
+            print("================")
+            for c in range(nclases):
+                labels_group_c=labels_group[c]
+                logits_group_c=logits_group[:,c,:,:]
+                print(c,"Labels Group C:",labels_group_c.shape)
+                print(c,"Logits Group:C",logits_group_c.shape)                
+                if labels_group_c < 0.5:
+                    loss_groupc=modelos.focal_loss_binary_with_logits(logits_group_c,torch.full(logits_group_c.shape,labels_group_c).to(logits_group_c.device),
+                                                                      alpha=self.focal_loss_alpha,gamma=self.focal_loss_gamma)
+                    #print("Loss Group C:",loss_groupc)
+                    neg_losses.append(loss_groupc)
+                else:
+                    max_logit=torch.max(logits_group_c) 
+                    loss_groupc=modelos.focal_loss_binary_with_logits(max_logit,torch.full(max_logit.shape,labels_group_c).to(max_logit.device),
+                                                                      alpha=self.focal_loss_alpha,gamma=self.focal_loss_gamma)
+                    pos_losses.append(loss_groupc)
+        pos_loss=torch.stack(pos_losses).mean()
+        neg_loss=torch.stack(neg_losses).mean()
+        loss=(pos_loss+neg_loss)/2
+        return loss,pos_loss,neg_loss
+                    
 
     def training_step(self, batch, batch_idx):
         images = batch['images']
@@ -203,7 +325,9 @@ class PatchMILClassifier(pl.LightningModule):
             self.estadisticas_labels=torch.concat((self.estadisticas_labels,labels),dim=0)
 
         logits_patches,logits_view,logits_fruit = self.forward(images,nviews)
-        loss = self.criterion(logits_fruit, labels)
+        
+        #loss,pos_loss,neg_loss = self.criterion_patches(logits_patches, labels,nviews) 
+        loss,pos_loss,neg_loss = self.criterion(logits_fruit, labels)
         if loss==0:
             print("*** WARNNG Training Zero Loss. Labels= ",labels)
             if images.isnan().any():
@@ -212,7 +336,8 @@ class PatchMILClassifier(pl.LightningModule):
                 print("No hay Nans en imagen")
         
         # perform logging
-        self.log("train_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        log_dict = {'train_loss': loss, 'pos_loss':pos_loss, 'neg_loss':neg_loss}
+        self.log_dict(log_dict, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         
         return loss
 
@@ -224,7 +349,8 @@ class PatchMILClassifier(pl.LightningModule):
         nviews = batch['nviews']
         
         logits_patches,logits_view,logits_fruit = self.forward(images,nviews=nviews) # mapas de logits [b,c,11,11]
-        loss = self.criterion(logits_fruit, labels)
+        loss = self.criterionval(logits_fruit, labels)
+        #loss,pos_loss,neg_loss = self.criterion_patches(logits_patches, labels,nviews)
         
         preds=F.sigmoid(logits_fruit)
        
@@ -268,7 +394,7 @@ class PatchMILClassifier(pl.LightningModule):
             medias=torch.nanmean(self.estadisticas_labels,dim=0)
             self.pos_weights=(1-medias)/medias
             self.estadisticas_labels=None
-        print("self.pos_weights: ",self.pos_weights )
+        #print("self.pos_weights: ",self.pos_weights )
         self.epoch_counter += 1
 
         aucfunc=AUROC(task='multilabel',average='none',num_labels=self.num_classes)
@@ -378,7 +504,7 @@ class PatchMILClassifier(pl.LightningModule):
             extension=caso.split('.')[-1]
 
             if extension == 'npz':
-                print("nombre_json:",json_file)
+                #print("nombre_json:",json_file)
                 x = pycimg.npzread_torch(caso,nombre_json=json_file,channel_list=self.channel_list)
             else:
                 print(f"   >>>>>>>>>>>>> {caso}: Extension no contemplada")

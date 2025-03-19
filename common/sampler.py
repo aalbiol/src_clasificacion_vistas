@@ -22,8 +22,8 @@ def get_matriz_casos(dataset):
     ''' matriz de casos de un CImgFruitsViewsDataSet
     '''
     matriz_casos=[]
-    print(">>>> Get_matriz_casos")
-    print(">>>> Dataset type:", type(dataset))
+    #print(">>>> Get_matriz_casos")
+    #print(">>>> Dataset type:", type(dataset))
     for k in tqdm(range(len(dataset))):
         target=dataset.__get_target__(k)
         #print(">>>> Get_matriz_casos", target)
@@ -120,10 +120,11 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
     Util para clases muy desbalanceadas
     '''
     def __init__(self,dataset,class_names):
-        print ('>>>>>>>>>>>>>>>>< Sampler init Type Dataset:', type(dataset))
+        print ('>>>>>>>>>>>>>>>>< Sampler init Type Dataset <<<<<<<<<<<<<<<< ')#, type(dataset))
         matriz_casos=get_matriz_casos(dataset)
         estadistica_clase=get_class_distribution(matriz_casos)
         num_clases=len(estadistica_clase) 
+        self.matriz_casos=matriz_casos
         
         print('Sampler Numclases=',num_clases)
         self.listas=[]
@@ -139,10 +140,11 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
             self.listas.append(lista)
             self.lengths.append(len(lista))
         
+        max_length=max(self.lengths)
         print('Sampler Numlistas=',len(self.listas)) 
         self.dataset = dataset
-        self.len =  2*len(dataset)
-        print('Sampler len=',self.len) 
+        self.len =  len(dataset)
+        print('Sampler len=',max_length*len(self.listas)) 
 
         for count,l in enumerate(self.listas):
             if count ==0:
@@ -173,6 +175,8 @@ class Balanced_BatchSamplerMultiLabel(Sampler):
             for count,lista in enumerate(self.listas):
                 pos=iteration % self.lengths[count]
                 n+=1
+                # print("Lista:",count,"Pos:",pos,"Elemento",lista[pos])
+                # print("matriz_casos:",self.matriz_casos[lista[pos]])
                 yield lista[pos]
                 #print('Yield:',lista[pos])
                 # batch.append( lista[pos])

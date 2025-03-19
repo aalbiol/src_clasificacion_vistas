@@ -45,14 +45,20 @@ from pl_patch_MIL_modulo import PatchMILClassifier
 if __name__ == "__main__":
     parser = ArgumentParser()
 
-    parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
+    # parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
 
 
-    with open(args.config,'r') as f:
+    # with open(args.config,'r') as f:
+    #     config=yaml.load(f,Loader=yaml.FullLoader)
+
+    if len(sys.argv) < 2:
+        print("Usage: trainPatchMIL.py <config_file>")
+        sys.exit(1)
+
+    with open(sys.argv[1],'r') as f:
         config=yaml.load(f,Loader=yaml.FullLoader)
-    
     
        # Comprobar si hay GPU
     cuda_available=torch.cuda.is_available()
@@ -93,7 +99,7 @@ if __name__ == "__main__":
 
 
     num_channels_in=config['model']['num_channels_input']
-    model_version= int(config['model']['model_version'])
+    model_version= config['model']['model_version']
    
     
     print('Creating DataModule...')
@@ -138,14 +144,14 @@ if __name__ == "__main__":
                             label_smoothing=config['train']['label_smoothing'],
                             weight_decay=config['train']['weights_decay'],
                             normalization_dict=dict_norm,
-                            training_size=training_size,)
+                            training_size=training_size,
+                            config=config)
     
     
             
     # Continuar entrenamiento a partir de un punto
     if config['train']['initial_model'] is not None:
-        checkpoint = torch.load(config['initial_model'])
-        model.load_state_dict(checkpoint['state_dict'])
+        model.load(config['train']['initial_model'])
 
 
     # Instantiate lightning trainer and train model

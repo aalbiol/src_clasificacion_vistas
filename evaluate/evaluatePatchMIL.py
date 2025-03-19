@@ -152,7 +152,7 @@ if __name__ == "__main__":
         #view_id=caso['view_id']
         imags_folder=caso['imag_folder']
         json_file=caso['json_file_full_path']
-        print("Main Json file:",json_file)
+        #   print("Main Json file:",json_file)
         #view_id=os.path.join(imags_folder,view_id)
         nombre_cimg=caso['image_file_full_path']
         results=model.predict(nombre_cimg,device,include_images=False,json_file=json_file)
@@ -162,15 +162,31 @@ if __name__ == "__main__":
         #results=model.predict(image,device)
         tensor_probs=torch.tensor(result['probs_fruto_tensor'])
         preds_train.append(tensor_probs)
-        targets_train.append(targets.unsqueeze(dim=0))
-        targets_dict={}
-        
-        for nclase in range(len(tipos_defecto)):
-            targets_dict[tipos_defecto[nclase]]=int(targets[nclase].item())
 
-        json_data.append({'filename': result['imgname'],
+
+
+        targets_views=None
+        if targets.ndim==1:
+            targets_fruit=targets
+        else:
+            targets_fruit=targets.max(dim=0).values
+            with open(json_file,'r') as f:
+                data=json.load(f)
+                targets_views=data['views_annotations']
+        
+        targets_train.append(targets_fruit.unsqueeze(dim=0))
+        targets_fruit_dict={}
+        for nclase in range(len(tipos_defecto)):
+            targets_fruit_dict[tipos_defecto[nclase]]=int(targets_fruit[nclase].item())
+        a_guardar={'filename': result['imgname'],
                             'scores':result['probs_fruto'],
-                            'ground_truth': targets_dict})
+                            'ground_truth': targets_fruit_dict,
+                            'probs_vistas':result['probs_vistas']}
+        if targets_views is not None:
+            a_guardar['ground_truth_views']=targets_views
+        
+        json_data.append(a_guardar)
+
                         
 
     data_train={'train_results':json_data,
@@ -217,15 +233,31 @@ if __name__ == "__main__":
         #print("Result:",result) 
         #results=model.predict(image,device)
         preds_val.append(result['probs_fruto_tensor'])
-        targets_val.append(targets.unsqueeze(dim=0))
-        targets_dict={}
         
-        for nclase in range(len(tipos_defecto)):
-            targets_dict[tipos_defecto[nclase]]=int(targets[nclase].item())
+        
 
-        json_data.append({'filename': result['imgname'],
+
+        targets_views=None
+        if targets.ndim==1:
+            targets_fruit=targets
+        else:
+            targets_fruit=targets.max(dim=0).values
+            with open(json_file,'r') as f:
+                data=json.load(f)
+                targets_views=data['views_annotations']
+        targets_val.append(targets_fruit.unsqueeze(dim=0))
+        
+        targets_fruit_dict={}
+        for nclase in range(len(tipos_defecto)):
+            targets_fruit_dict[tipos_defecto[nclase]]=int(targets_fruit[nclase].item())
+        a_guardar={'filename': result['imgname'],
                             'scores':result['probs_fruto'],
-                            'ground_truth': targets_dict})
+                            'ground_truth': targets_fruit_dict,
+                            'probs_vistas':result['probs_vistas']}
+        if targets_views is not None:
+            a_guardar['ground_truth_views']=targets_views
+        
+        json_data.append(a_guardar)
                         
 
 

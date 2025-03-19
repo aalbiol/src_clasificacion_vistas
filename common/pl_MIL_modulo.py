@@ -27,6 +27,12 @@ from torchvision import transforms
 
 from tqdm import tqdm
 import pycimg
+import os
+import sys
+current_file_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_file_dir+'/../train')
+
+from m_finetuning import count_unfrozen_parameters
 
 
 # Para clasificar vistas entrenando con MIL cuando anotaciones son por fruto y no por vista    
@@ -41,7 +47,8 @@ class MILClassifier(pl.LightningModule):
                 label_smoothing=0.01,
                 p_dropout=0.5,
                 normalization_dict=None,
-                training_size=None):
+                training_size=None,refine_classifier=False,
+                config=None):
         super().__init__()
 
 
@@ -62,6 +69,8 @@ class MILClassifier(pl.LightningModule):
         self.p_dropout=p_dropout
                                 
         self.optimizer_name = optimizer
+        self.refine_classifier=refine_classifier
+        self.config=config
         
         if self.class_names is not None:
             print('FruitMILClassifier num clases out=',self.num_classes)
@@ -69,7 +78,7 @@ class MILClassifier(pl.LightningModule):
         
         if model_version is not None:
             if model_version == "50":
-                self.modelo=modelos.resnet50MIL(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout) 
+                self.modelo=modelos.resnet50(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout) 
                 print('Using resnet50')  
             # elif model_version == "68":
             #     self.modelo=modelos.dualpathnet68(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout)  
@@ -83,9 +92,13 @@ class MILClassifier(pl.LightningModule):
             # elif model_version == "mobilelarge":
             #     self.modelo=modelos.mobilenetV3large(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout)  
             #     print('Using MobileNetV3_Large')      
+            elif model_version=="vit_16":
+                self.modelo=modelos.Vit(tipo=model_version,
+                                              num_channels_in=num_channels_in, num_classes=self.num_classes)  
+                print('Using ViT_16')
             else:
                 print(f"\n***** Warning. Version resnet solicitada {model_version} no contemplada. Usando resnet50")
-                self.modelo=modelos.resnet50MIL(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout)    
+                self.modelo=modelos.resnet50(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout)    
         else:
             self.modelo=None
 
@@ -147,6 +160,41 @@ class MILClassifier(pl.LightningModule):
         return logits_fruit,logits_all_views 
     
     def criterion(self, logits, labels):       
+
+        
+
+                    
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='none')
+        #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+        # print('logit.shape:',logits.shape)
+        # print('smoothed_labels.shape:',smoothed_labels.shape)
+        #   print(">>>>>>>>>>>>smoothed labels:", smoothed_labels)
+        losses=binaryLoss(logits,labels)
+        
+        losses_cols=[]
+        for col in range(labels.shape[1]):
+            labels_col=labels[:,col]
+            losses_col=losses[:,col]
+            pos_loss_col=losses_col[labels_col>0.5].mean()
+            neg_loss_col=losses_col[labels_col<0.5].mean()
+            loss_col=(pos_loss_col+neg_loss_col)/2
+            losses_cols.append(loss_col)
+        loss=torch.stack(losses_cols).mean()
+        
+        
+        
+        if torch.isnan(loss):            
+            print ('\nNAN Loss Logits:',logits, " labels:", labels, 'epoch:', self.epoch_counter)
+            print("NAN Losses:",loss,losses_cols)
+        return loss
+    
+    def criterionval(self, logits, labels):                                   
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+        loss=binaryLoss(logits,labels)
+        return loss
+    
+        
+    def criterion2(self, logits, labels):       
         if self.pos_weights is None:
             pos_weight = torch.ones([self.num_classes],dtype=torch.float32,device=self.device)
             #scale tensor by 10 
@@ -172,7 +220,26 @@ class MILClassifier(pl.LightningModule):
         
     def configure_optimizers(self):
         print("weight decay = ",self.weight_decay)
-        parameters = list(filter(lambda x: x.requires_grad, self.parameters()))
+        
+        if self.refine_classifier == True:
+            for param in self.modelo.parameters(): # Ponerlos a no entrenables
+                param.requires_grad = False
+                
+            
+            
+            for module in self.modelo.modules():
+                if isinstance(module, nn.BatchNorm2d) or isinstance(module, nn.BatchNorm1d):
+                    module.eval()#sets batchnorm to evaluation mode.
+                    
+            for param in self.modelo.classifier.parameters(): # Poner entrenable el clasificador
+                param.requires_grad = True
+            
+        parameters = list(filter(lambda x: x.requires_grad, self.modelo.classifier.parameters()))
+        
+        print("Refine Classifier:",self.refine_classifier)    
+        print("Activating gradients for:", count_unfrozen_parameters(self.modelo), " parameters")
+        #print("parameters:",parameters)
+        
         if self.optimizer_name.lower() == 'sgd':
             optimizer = SGD(parameters, lr=self.lr, weight_decay=self.weight_decay)
         elif self.optimizer_name.lower() == 'adam':
@@ -180,12 +247,13 @@ class MILClassifier(pl.LightningModule):
         else:
             print(f'**** WARNING : Optimizer configured to {self.optimizer_name}. Falling back to SGD')
             optimizer = SGD(parameters, lr=self.lr, weight_decay=self.weight_decay)
-                       
+        num_epochs=self.config['train']['epochs']            
+        gamma=0.2**(1/num_epochs)               
         if self.warmup_iter > 0:           
             warmup_lr_scheduler = LinearLR(optimizer, start_factor=0.1, total_iters=self.warmup_iter)
-            schedulers = [warmup_lr_scheduler, ExponentialLR(optimizer, gamma=0.99) ]
+            schedulers = [warmup_lr_scheduler, ExponentialLR(optimizer, gamma=gamma) ]
         else:
-           schedulers = [ ExponentialLR(optimizer, gamma=0.99) ] 
+           schedulers = [ ExponentialLR(optimizer, gamma=gamma) ] 
         return [optimizer],schedulers
     
     
@@ -221,7 +289,7 @@ class MILClassifier(pl.LightningModule):
         casos = batch['paths']
         logits_fruto,logits_vistas = self(images, nviews)
         
-        loss = self.criterion(logits_fruto, labels)
+        loss = self.criterionval(logits_fruto, labels)
         
         preds=F.sigmoid(logits_fruto)
 
@@ -260,12 +328,19 @@ class MILClassifier(pl.LightningModule):
         
         if self.valpreds is not None:
         #Calcular AUC
-            aucfunc=AUROC(task='multilabel',average='none',num_labels=self.num_classes)
+            if self.num_classes > 1:
+                aucfunc=AUROC(task='multilabel',average='none',num_labels=self.num_classes)
+            else:
+                aucfunc=AUROC(task='binary')
             auc=aucfunc(self.valpreds,(self.valtargets>0.5).int())
 
             self.aucs={}
-            for i in range(self.num_classes):
-                self.aucs[f'Val AUC - {self.class_names[i]}']=auc[i].item()
+            if self.num_classes >1:
+                for i in range(self.num_classes):
+                    self.aucs[f'Val AUC - {self.class_names[i]}']=auc[i].item()
+            else:
+                self.aucs[f'Val AUC - {self.class_names[0]}']=auc.item()
+                
             self.log_dict(self.aucs)#,on_step=False, on_epoch=True, prog_bar=True, logger=True)
             # Borrar para recomenzar en epoch siguiente    
             self.valpreds=None
@@ -313,7 +388,7 @@ class MILClassifier(pl.LightningModule):
         self.num_classes=len(self.class_names)
         self.p_dropout=leido['p_dropout']
         self.num_classes=len(self.class_names)
-        self.modelo=modelos.resnet50MIL(num_channels_in=self.num_channels_in,
+        self.modelo=modelos.resnet50(num_channels_in=self.num_channels_in,
                                          num_classes=self.num_classes,
                                          p_dropout=self.p_dropout)
 
@@ -326,6 +401,7 @@ class MILClassifier(pl.LightningModule):
         self.maxvalues=leido['config']['data']['maxvalues']
         #print("Loading maxvalues:",self.maxvalues)
         self.channel_list=leido['config']['data']['channel_list']
+        self.aucs=leido['final_val_aucs']
     
     
     

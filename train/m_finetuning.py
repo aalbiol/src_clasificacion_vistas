@@ -4,15 +4,19 @@ def count_unfrozen_parameters(model):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 class FeatureExtractorFreezeUnfreeze(BaseFinetuning):
-    def __init__(self, unfreeze_at_epoch=10,initial_denom_lr=2):
+    def __init__(self, unfreeze_at_epoch=10,initial_denom_lr=2,freeze_conditioner=False):
         super().__init__()
         self._unfreeze_at_epoch = unfreeze_at_epoch
         self.initial_denom_lr=initial_denom_lr
+        self.freeze_conditioner=freeze_conditioner
 
     def freeze_before_training(self, pl_module):
         # freeze any module you want
         # Here, we are freezing `feature_extractor`
         self.freeze(pl_module.modelo.features)
+        if self.freeze_conditioner:
+            print("Freezing conditioner")
+            self.freeze(pl_module.modelo.conditioner)
 
     def finetune_function(self, pl_module, current_epoch, optimizer):
     # When `current_epoch` is 10, feature_extractor will start training.

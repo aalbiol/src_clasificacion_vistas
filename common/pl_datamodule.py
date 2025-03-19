@@ -80,6 +80,32 @@ def extract_one_hot(d,tipos_defecto):
         else:
             v.append(math.nan)
     return torch.tensor(v)
+def extract_one_hot_views(d,tipos_defecto):
+    if "views_annotations" not in d:
+        return None
+    anot_vistas =d['views_annotations']
+    anot2={}
+    num_vistas=len(anot_vistas)
+
+    onehot_matrix=torch.zeros(num_vistas,len(tipos_defecto))
+    for vista_id,vista_anots in anot_vistas.items():
+        num_vista=int(vista_id.split('_')[-1])
+        vista_anots_lower={} # Por si están en minusculas
+        for k,v in vista_anots.items():
+            vista_anots_lower[k.lower()]=v
+
+        for def_k,defecto in enumerate(tipos_defecto):
+            if defecto in vista_anots_lower:
+                tmp=vista_anots_lower[defecto]
+                if isinstance(tmp,str):
+                    tmp=float(tmp)
+                if tmp <0 :
+                    tmp=math.nan            
+            else:
+                tmp=math.nan
+            onehot_matrix[num_vista,def_k]=tmp
+    return onehot_matrix
+    
 
 # def split_train_val(lista,p):
 #     n1=int(len(lista)*p)
@@ -295,7 +321,14 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         jsonfile=fruto[0]
         imags_folder=fruto[1]
         d=parse_json(jsonfile)
-        onehot=extract_one_hot(d,tipos_defecto)
+        onehot_fruit=extract_one_hot(d,tipos_defecto)
+
+        onehotviews=extract_one_hot_views(d,tipos_defecto)
+        if onehotviews is not None:
+            #print("Using views annotations for ",os.path.basename(jsonfile))
+            onehot=onehotviews
+        else:
+            onehot=onehot_fruit
         fruitid=fruit_id_MIL(jsonfile)
         # json_sin_ext=os.path.splitext(jsonfile)[0]
         # json_sin_ext_sin_dir=os.path.basename(json_sin_ext)
@@ -316,8 +349,11 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
                 sys.exit(1)
         else:
             vistas=None
-        dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 
-                     'imag_folder': imags_folder,  'json_file_full_path': jsonfile,'image_file_full_path':nombre_img,
+        
+        # Si se emplean anotaciones de vistas onehot sera una matriz de dos dimensiones
+        # Si solo hay una vista sera de 1 x num_defectos
+        dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 'labels_fruit': onehot_fruit,
+                     'imag_folder': imags_folder,  'json_file_full_path': jsonfile,'image_file_full_path':nombre_img,'sufijos':terminacion,
                      'max_value':maxvalue, 'channel_list':channel_list}
         out.append(dict_fruto)     
             
@@ -329,7 +365,7 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
 
 # ===================================== NORMALIZACION ==================
 # 
-def calcula_media_y_stds(trainset,crop_size=None):
+def calcula_media_y_stds(trainset):
     
     print("Estimando medias y stds...\n")
     medias=[]
@@ -337,29 +373,16 @@ def calcula_media_y_stds(trainset,crop_size=None):
     
     pix_dimensions=(1,2)
     area_total=0
-    for caso in tqdm(trainset):
-        img=caso['image']
-        view_id=caso['view_id']
-        if img is None: #Cuando no está en memoria
-            imags_folder=caso['imag_folder']
-            sufijos=caso['sufijos']
-            max_value=caso['max_value']
-            
-            #print("Reading ", view_id)
-            img=lee_vista(imags_folder,view_id,sufijos,max_value=max_value,carga_mask=True)
+    num_imags=len(trainset)
+    for k in tqdm(range(num_imags)):
+        lectura=trainset.__get_item__(k)
+        image=lectura[0]
         
-        if crop_size is not None:
-            image=transforms.functional.center_crop(img,crop_size)
-        else:
-            image=img
-        
-        
-        mask=(image[0]>0)
-        area=torch.sum(mask)
-        
+
         suma=torch.sum(image,axis=pix_dimensions)
         image2=image*image
         suma2=torch.sum(image2,axis=pix_dimensions)
+        area=image.shape[-1]*image.shape[-2]
         area_total +=area
         #print('Area util :', area)
 
@@ -381,18 +404,12 @@ def calcula_media_y_stds_MIL(trainset):
     suma2=0
     npixels=0
     
-    pix_dimensions=(1,2) # El eje 0 es el color
-    area_total=0
-    for caso in trainset:
-        vistas=caso['image']
-        fruit_id=caso['fruit_id']
-        maxvalue=caso['max_value']
-        channel_list=caso['channel_list']
-        if vistas is None: #Cuando no está en memoria
-            imags_folder=caso['imag_folder']
-            nombre_cimg=os.path.join(imags_folder,fruit_id)
-            nombre_cimg += ".cimg"        
-            vistas = pycimg.cimglistread_torch(nombre_cimg,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
+    pix_dimensions=(-1,-2) # El eje 0 es el color
+
+    num_imags=len(trainset)
+    for k in tqdm(range(num_imags)):
+        lectura=trainset.__getitem__(k)
+        vistas=lectura[0]
             
         for v in vistas:
             suma +=torch.sum(v,axis=pix_dimensions)
@@ -472,11 +489,24 @@ def my_collate_fn_MIL(data): # Genera un batch a partir de una lista de frutos
     images = [d[0] for d in data]
     images = torch.concat(images, axis = 0) # tendra dimensiones numvistastotalbatch, 3,250,250
     
-    nviews = [d[0].shape[0] for d in data] # contiene (nviews0, nviews1,,... ) con tantos elementos como frutos tenga el batch
+    nviews=[]
+    labels=[]
+    for k in range(len(data)):
+        labels_k=data[k][1]
+        if labels_k.ndim==1: # Anot de fruto
+            nviews.append(data[k][0].shape[0])
+            labels.append(labels_k.unsqueeze(0))
+        else: # anot de vista. Añado tantos unos como vistas tenga el fruto
+            for k in range(labels_k.shape[0]):
+                nviews.append(1)
+            labels.append(labels_k)
+
+    #nviews = [d[0].shape[0] for d in data] # contiene (nviews0, nviews1,,... ) con tantos elementos como frutos tenga el batch
     # Sirve para poder trocear luego por frutos
     
-    labels = [d[1] for d in data]
-    labels = torch.stack(labels,axis=0) #(5)
+    #labels = [d[1] for d in data]
+    labels = torch.concatenate(labels,axis=0) #(5)
+    #print(nviews)
 
     paths = [d[2] for d in data]
     return { #(6)
@@ -593,10 +623,14 @@ class ViewDataModule(pl.LightningDataModule):
             self.valset=None
             self.train_dataset = None
             self.val_dataset = None
+            
+        if self.trainset is not None:
+            self.train_dataset = ViewsDataSet(dataset=self.trainset, transform = transform_train,carga_mask=self.carga_mask)           
+            self.val_dataset = ViewsDataSet(dataset=self.valset, transform = transform_val,carga_mask=self.carga_mask)             
         
         if self.medias_norm is None or self.stds_norm is None:
             print("Calculando parametros de normalizacion...")
-            self.medias_norm, self.stds_norm=calcula_media_y_stds(self.trainset,self.crop_size)
+            self.medias_norm, self.stds_norm=calcula_media_y_stds(self.train_dataset)
             print('He calculado parametros de normalizacion')
             print(f'Medias: {self.medias_norm}')
             print(f'Stds: {self.stds_norm}')
@@ -651,9 +685,7 @@ class ViewDataModule(pl.LightningDataModule):
             transform_val = Aumentador_Imagenes(transforms.Resize(self.training_size),
                                                     None,None,transform_normalize)
 
-        if self.trainset is not None:
-            self.train_dataset = ViewsDataSet(dataset=self.trainset, transform = transform_train,carga_mask=self.carga_mask)           
-            self.val_dataset = ViewsDataSet(dataset=self.valset, transform = transform_val,carga_mask=self.carga_mask) 
+
             
         
         if self.predict_path is not None:
@@ -777,10 +809,16 @@ class JSONSCImgDataModule(pl.LightningDataModule):
                                                                                     defect_types=defect_types,in_memory=in_memory,
                                                                                     channel_list=self.channel_list,
                                                                                     terminacion=terminacion)
+        self.numlabels=len(self.tipos_defecto)           
+
+
+        train_dataset_medias=CImgListDataSet(dataset=self.trainset,transform=transforms.Resize(self.training_size),channel_list=self.channel_list,terminacion=self.terminacion)  
         
+
+            
         if self.medias_norm is None or self.stds_norm is None:
             print('\n *** INFO: Estimando medias y varianzas normalizacion')
-            self.medias_norm,self.stds_norm=calcula_media_y_stds_MIL(self.trainset)
+            self.medias_norm,self.stds_norm=calcula_media_y_stds_MIL(train_dataset_medias)
             print('     ** Estimated medias_norm:', self.medias_norm)
             print('     ** Estimated stds_norm:', self.stds_norm)
             
@@ -840,15 +878,12 @@ class JSONSCImgDataModule(pl.LightningDataModule):
             print(f"JSONSCImgDataModule tipos defecto desde configuración: {self.tipos_defecto}")
             
 
-        
-            
-        self.numlabels=len(self.tipos_defecto)           
-
         if self.train_dataplaces is not None:
-                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list,terminacion=self.terminacion)  
-                
+                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list,terminacion=self.terminacion)        
         if self.val_dataplaces is not None:            
             self.val_dataset=CImgListDataSet(dataset=self.valset,transform=transform_val,channel_list=self.channel_list,terminacion=self.terminacion)
+            
+
 
             
         print(f"JSONSCImgDataModule num labels = {self.numlabels}")
