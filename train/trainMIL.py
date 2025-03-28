@@ -43,14 +43,16 @@ from pl_MIL_modulo import MILClassifier
 
 
 if __name__ == "__main__":
-    parser = ArgumentParser()
+    # parser = ArgumentParser()
 
-    parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
+    # parser.add_argument("--config", default = "configs/train.yaml", help="""YAML config file""")
 
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    if len(sys.argv) < 2:
+        print("Usage: python trainMIL.py congig.yaml")
+        sys.exit(1) 
 
-
-    with open(args.config,'r') as f:
+    with open(sys.argv[1],'r') as f:
         config=yaml.load(f,Loader=yaml.FullLoader)
     
     

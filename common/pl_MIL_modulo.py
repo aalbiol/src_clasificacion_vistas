@@ -101,7 +101,17 @@ class MILClassifier(pl.LightningModule):
                 self.modelo=modelos.resnet50(num_channels_in=num_channels_in, num_classes=self.num_classes,  p_dropout=self.p_dropout)    
         else:
             self.modelo=None
-
+        if config is not None:
+            if 'focal_loss_gamma' in config['train']:
+                print("Using focal loss gamma=",config['train']['focal_loss_gamma'])
+                self.focal_loss_gamma=config['train']['focal_loss_gamma']
+            else:
+                self.focal_loss_gamma=None
+            
+            if 'focal_loss_alpha' in config['train']:
+                self.focal_loss_alpha=config['train']['focal_loss_alpha']
+            else:
+                self.focal_loss_alpha=None
         
         self.epoch_counter=1
         
@@ -160,8 +170,10 @@ class MILClassifier(pl.LightningModule):
         return logits_fruit,logits_all_views 
     
     def criterion(self, logits, labels):       
-
-        
+        if self.focal_loss_alpha is not None:
+            gamma=self.focal_loss_gamma
+            loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=gamma)
+            return loss        
 
                     
         binaryLoss = nn.BCEWithLogitsLoss(reduction='none')
@@ -188,7 +200,12 @@ class MILClassifier(pl.LightningModule):
             print("NAN Losses:",loss,losses_cols)
         return loss
     
-    def criterionval(self, logits, labels):                                   
+    def criterionval(self, logits, labels): 
+        if self.focal_loss_alpha is not None:
+            gamma=self.focal_loss_gamma
+            loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=gamma)
+            return loss    
+                                          
         binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
         loss=binaryLoss(logits,labels)
         return loss

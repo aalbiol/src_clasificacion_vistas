@@ -31,7 +31,7 @@ class ResNet(nn.Module):
             y=x
         f=self.features(y)
         f=self.dropout(f)
-        return self.classifier(f)
+        return self.classifier(f)[:,:,0,0]
 
 class VitPatch(nn.Module):
     def __init__(self,tipo, num_channels_in, num_classes):
