@@ -315,6 +315,7 @@ class PatchMILClassifier(pl.LightningModule):
         images = batch['images']
         labels = batch['label']
         nviews = batch['nviews']
+        #print("nviews:",nviews)
         if self.resnet_version is None:
             print(">>>>>>>>>>>>>>>>> ERROR. Resnet version not defined in training step")
             sys.exit(1)

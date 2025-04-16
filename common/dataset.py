@@ -15,6 +15,8 @@ from torch.utils.data import Dataset
 import cv2
 import pycimg
 
+from PIL import Image
+
 
 
 def lee_png16(filename,max_value):
@@ -167,3 +169,57 @@ class CImgListDataSet(Dataset):
         return self.dataset[index]['labels_fruit'] 
     def __len__(self) -> int:
         return len(self.dataset)
+    
+
+def get_clase(filename):
+    """
+    Get the class of the image from the filename
+    """
+    # Get the class from the filename
+    # The class is the first part of the filename
+    # before the first underscore
+    directorio=os.path.dirname(filename)
+    clase=directorio.split("/")[-1]
+    return clase
+
+class ListasDataSet(Dataset):
+    def __init__(self,lista_ficheros=None , clases=None, transform=None):
+        
+        
+        assert transform is not None, "No se ha definido la transformacion"
+        self.lista_ficheros=lista_ficheros   
+        self.transform = transform
+        self.clases=clases
+        self.clases_dict={}
+        #print("Clases:",clases)
+        for i, clase in enumerate(clases):
+            self.clases_dict[clase]=i
+
+        self.onehots={}
+        for i, clase in enumerate(clases):
+            self.onehots[clase]=torch.zeros(len(clases))
+            self.onehots[clase][i]=1
+        
+        
+        
+        
+              
+    def __getitem__(self, index: int) -> Tuple[Any, Any]:
+        #print("Getting item",index)
+        assert index >=0 and index < len(self.lista_ficheros), f"Index {index} out of range {len(self.lista_ficheros)}"
+        caso=self.lista_ficheros[index]
+        
+        clase=get_clase(caso)
+        target =self.clases_dict[clase]
+        onehot=self.onehots[clase]
+        with Image.open(caso) as pil:
+            #print("pilt.type",type(pil))
+            image= self.transform(pil)    # Siempre existe transformacion
+        #print("image.type",type(image))
+        return image,onehot,caso # pixeles, onehot, (ruta_al_archivo, vista_id)
+    
+    def get_target(self, index: int) -> Any:
+        return self.clases_dict[get_clase(self.lista_ficheros[index])]
+    
+    def __len__(self) -> int:
+        return len(self.lista_ficheros)

@@ -56,60 +56,68 @@ def get_class_distribution(matriz_casos):
     distribution=torch.sum(matriz_casos,dim=0)
     return distribution
 
-# class Balanced_BatchSampler(Sampler):
-#     '''
-#     Dado un CImgFruitsViewsDataSet multilabel
-#     devuelve batches donde se asegura la misma cantidad de etiquetas positivas de todas las clases
+class Balanced_BatchSampler(Sampler):
+    '''
+    Dado un dataset multiclass
+    devuelve batches donde se asegura la misma cantidad de etiquetas positivas de todas las clases
     
-#     Util para clases muy desbalanceadas
-#     '''
-#     def __init__(self,dataset):
-#         estadistica_clase=get_class_distribution(dataset)
-#         num_clases=len(estadistica_clase) 
+    Util para clases muy desbalanceadas
+    '''
+    def __init__(self,dataset,clases):
+
+
         
         
-#         self.listas=[]
-#         self.lengths=[] 
-#         for k in range(num_clases): 
-#             lista= get_class_items(dataset,k)
-#             self.listas.append(lista)
-#             self.lengths.append(len(lista))
+        self.listas=[]
+        for c in clases: # Crear tantas listas vacías como clases
+            self.listas.append([])
+        
+        nitems=len(dataset)
+        for k in range(nitems):
+            clase=dataset.get_target(k)
+            #print('Populating class:',clase)
+            self.listas[clase].append(k)
+                
+        self.lengths=[]
+        for k in range(len(clases)): 
+             self.lengths.append(len(self.listas[k]))
          
-#         self.dataset = dataset
-#         self.len = len(dataset)
+        self.dataset = dataset
+
+        copia_lengths=self.lengths.copy()
+        copia_lengths.sort(reverse=True)
+        max_length=copia_lengths[1]
+
+        self.len = max_length*len(clases) # Un epoch es cuando la segunda lista más larga da una vuelta completa
 
                 
    
     
-#     def barajarListas(self):
-#         for lista in self.listas:
-#             random.shuffle(lista)
+    def barajarListas(self):
+        for lista in self.listas:
+            random.shuffle(lista)
         
         
-#     def __iter__(self):
-#         ''' Devuelve un epoch balanceado'''
-#         iteration = 0
-#         self.barajarListas()
+    def __iter__(self):
+        ''' Devuelve un epoch balanceado'''
+        iteration = 0
+        self.barajarListas()
         
-#         #batch=[]
-#         n=0
+
+        n=0
         
-#         while n <= self.len:
-#             iteration += 1
-#             # Coger secuencialemente un elemento de cada lista
-#             # Cada lista se recorre ciclicamente
-#             for count,lista in enumerate(self.listas):
-#                 pos=iteration % self.lengths[count]
-#                 n+=1
-#                 yield lista[pos]
-#                 # batch.append( lista[pos])
-#                 # if len(batch)==self.batch_size:
-#                 #     out=batch
-#                 #     batch=[]
-#                 #     yield out             
+        while n <= self.len:
+            iteration += 1
+            # Coger secuencialemente un elemento de cada lista
+            # Cada lista se recorre ciclicamente
+            for count,lista in enumerate(self.listas):
+                pos=iteration % self.lengths[count]
+                n+=1
+                yield lista[pos]
+          
          
-#     def __len__(self) -> int:
-#         return self.len
+    def __len__(self) -> int:
+        return self.len
     
 
 class Balanced_BatchSamplerMultiLabel(Sampler):

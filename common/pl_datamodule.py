@@ -25,7 +25,7 @@ import sampler
 from transformaciones import Aumentador_Imagenes
 
 
-from dataset import ViewsDataSet,CImgListDataSet
+from dataset import ViewsDataSet,CImgListDataSet, ListasDataSet
 import pandas as pd
 import json
 import glob
@@ -277,11 +277,11 @@ def genera_ds_jsons_multilabel(root,  dataplaces, sufijos=None,max_value=255, pr
 
 
 
-def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=None, in_memory=True,channel_list=None,terminacion='.cimg'):
+def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=None, in_memory=True,channel_list=None,terminacion='.cimg',use_views_annotations=True):    
 
     json_files=[]
     imags_directorio=[]
-
+    print("Using views annotations:",use_views_annotations)
     for place in dataplaces:
         
         lista_filename=place[0]
@@ -324,7 +324,7 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         onehot_fruit=extract_one_hot(d,tipos_defecto)
 
         onehotviews=extract_one_hot_views(d,tipos_defecto)
-        if onehotviews is not None:
+        if onehotviews is not None and use_views_annotations:
             #print("Using views annotations for ",os.path.basename(jsonfile))
             onehot=onehotviews
         else:
@@ -482,6 +482,31 @@ def my_collate_fn(data): # Crear batch a partir de lista de casos
         'labels': labels,
         'view_ids': view_ids,
         'fruit_ids': fruit_ids
+    }
+
+def my_collate_fn_2(data): # Crear batch a partir de lista de casos
+    '''
+    images: tensor de batch_size x num_channels_in x height x width
+    labels: tensor de batch_size x num_classes
+    view_ids: lista de batch_size elementos 
+    fruit_ids: lista de batch_size elementos 
+    '''
+    images = [d[0] for d in data]
+    images = torch.stack(images, dim = 0) # tendra dimensiones numvistastotalbatch, 3,250,250
+    
+    labels = [d[1] for d in data]
+
+    labels = torch.stack(labels,dim=0)
+    #labels = torch.tensor(labels).long()
+    #labels es una lista con tantos elementos como batch_size
+    # Cada elemento
+    
+    view_ids = [d[2] for d in data]
+    
+    return { 
+        'images': images, 
+        'labels': labels,
+        'ids': view_ids,
     }
  
 def my_collate_fn_MIL(data): # Genera un batch a partir de una lista de frutos
@@ -766,6 +791,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
                 channel_list=[0,1,2],
                 augmentation=None,
                 terminacion='.npz',
+                use_views_annotations=True,
                   **kwargs):
         super().__init__()
 
@@ -793,6 +819,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
         self.valset = None
         self.maxvalue=maxvalue
         self.terminacion=terminacion
+        self.use_views_annotations=use_views_annotations
         if self.train_dataplaces is not None:
             self.trainset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
                                                                                     dataplaces=self.train_dataplaces, 
@@ -800,7 +827,7 @@ class JSONSCImgDataModule(pl.LightningDataModule):
                                                                                     defect_types=defect_types,
                                                                                     in_memory=in_memory,
                                                                                     channel_list=self.channel_list,
-                                                                                    terminacion=terminacion)
+                                                                                    terminacion=terminacion,use_views_annotations=use_views_annotations)
  
         if self.val_dataplaces is not None:
             self.valset,self.tipos_defecto=genera_ds_jsons_multilabelMIL(self.root_path, 
@@ -808,7 +835,8 @@ class JSONSCImgDataModule(pl.LightningDataModule):
                                                                                     maxvalue=maxvalue,
                                                                                     defect_types=defect_types,in_memory=in_memory,
                                                                                     channel_list=self.channel_list,
-                                                                                    terminacion=terminacion)
+                                                                                    terminacion=terminacion,
+                                                                                    use_views_annotations=use_views_annotations)
         self.numlabels=len(self.tipos_defecto)           
 
 
@@ -929,5 +957,124 @@ class JSONSCImgDataModule(pl.LightningDataModule):
         #parser.add_argument("--data.train_set_csv", type=str, default='text_files/train_set_articulo.csv')
         #parser.add_argument("--data.test_set_csv", type=str, default='text_files/test_set_articulo.csv')
         return parser
+
+
+
+class DirectoryDataModule(pl.LightningDataModule):
+
+    ''' 
+    Busca las imágenes en dos archivos de lista, train y val
+    La clase la determina del directorio donde se encuentra la imagen
+    '''
+    def __init__(self, 
+                root_path=None,
+                train_list=None,
+                val_list=None,
+
+                batch_size=5,
+                num_workers = -1,
+                defect_types = None,
+                normalization_means=[0.485, 0.456, 0.406], # Resnet
+                normalization_stds=[0.229, 0.224, 0.225],
+                imagesize=(170,170),
+
+                augmentation=None,
+                  **kwargs):
+        super().__init__()
+
+        assert augmentation is not None    
+        self.batch_size = batch_size
+
+        self.num_workers = num_workers if num_workers >= 0 else multiprocessing.cpu_count()-1
+        
+        self.tipos_defecto=defect_types
+        self.root_path=root_path
+        self.medias_norm = normalization_means
+        self.stds_norm = normalization_stds
+        self.target_image_size =imagesize
+        self.train_list=train_list
+        self.val_list=val_list
+        
+        self.root_path=root_path
+        self.imagesize=imagesize
+
+        self.augmentation = augmentation
+        
+        train_list=os.path.join(self.root_path,self.train_list)
+        val_list=os.path.join(self.root_path,self.val_list)
+
+        ## Leer las listas
+        with open(train_list) as f:
+            train_imags = f.readlines()
+        train_imags=[f.strip() for f in train_imags]
+        with open(val_list) as f:
+            val_imags = f.readlines()
+        val_imags=[f.strip() for f in val_imags]
+        
+           
+
+        augmentation=self.augmentation
+        transform_normalize=transforms.Compose([ transforms.ToTensor(), transforms.Normalize(self.medias_norm, self.stds_norm), transforms.Resize(self.imagesize)])
+            
+        transform_geometry= transforms.Compose([   
+        transforms.RandomHorizontalFlip(0.5),
+        transforms.RandomVerticalFlip(0.5),
+        transforms.RandomRotation(augmentation['random_rotation']),
+        transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                ),
+        
+        ])
+
+
+
+        transform_intensity_rgb= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
+            ])
+
+    
+
+        transform_train=transforms.Compose((transform_geometry,
+                                            transform_intensity_rgb,
+                                            transform_normalize,
+                                                    ))
+        
+        transform_val = transforms.Compose((transform_normalize))
+        
+
+        self.trainDataset=ListasDataSet(lista_ficheros=train_imags, clases=self.tipos_defecto,transform=transform_train)
+        self.valDataset=ListasDataSet( lista_ficheros=val_imags, clases=self.tipos_defecto, transform=transform_val)
+
+        print(f"len total trainset =   {len(self.trainDataset )}")
+        
+        print(f"len total valset =   {len(self.valDataset )}")
+            
+        print("batch_size in DirectoryDataModule ", self.batch_size)
+        
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage=None):
+        return None
+    
+     
+    def train_dataloader(self):
+        print("batch_size in Dataloader train", self.batch_size)
+        misampler=sampler.Balanced_BatchSampler(self.trainDataset,self.tipos_defecto)   
+        
+        return DataLoader(self.trainDataset, batch_size=self.batch_size, sampler=misampler, num_workers=self.num_workers, collate_fn=my_collate_fn_2)
+
+    def val_dataloader(self):
+        print("batch_size in Dataloader val", self.batch_size)
+        return DataLoader(self.valDataset, batch_size=self.batch_size, num_workers=self.num_workers, drop_last=False,shuffle=False, collate_fn=my_collate_fn_2)
+    # def predict_dataloader(self):
+    #     print("batch_size in predict data loader", self.batch_size)
+    #     return DataLoader(self.val_dataset , batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=my_collate_fn)
+
+
+
+
+
 
       

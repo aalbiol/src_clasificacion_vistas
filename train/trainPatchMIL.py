@@ -90,6 +90,14 @@ if __name__ == "__main__":
     tipos_defecto=config['model']['defect_types']
     aumentacion=config['train']['augmentation']
     
+    configdata=config['data']
+    if 'use_views_annotations' in configdata:
+        
+        use_views_annotations=configdata['use_views_annotations']
+        print('Getting use_views_annotations:',use_views_annotations)
+    else:
+        use_views_annotations=True
+    
     
     
     output=config['train']['output']
@@ -117,7 +125,8 @@ if __name__ == "__main__":
                  num_workers=config['train']['num_workers'],
                  channel_list=channel_list,
                  augmentation=aumentacion,
-                 terminacion=terminacion)
+                 terminacion=terminacion,
+                 use_views_annotations=use_views_annotations,)
     print('... done!')
 
   # Output
