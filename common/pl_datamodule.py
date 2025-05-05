@@ -362,6 +362,76 @@ def genera_ds_jsons_multilabelMIL(root,  dataplaces, maxvalue=255, defect_types=
         
 
 
+def genera_ds_jsons_multilabelMIL_lista(listafilename, maxvalue=255, defect_types=None, in_memory=True,channel_list=None,terminacion='.cimg',use_views_annotations=True):    
+
+    json_files=[]
+    imags_directorio=[]
+    print("Using views annotations:",use_views_annotations)
+            
+    with open(listafilename) as f:
+        fichs = f.readlines()
+    json_files=[f.strip() for f in fichs]
+    
+
+    if defect_types is None:
+        tipos_defecto=set()
+        for json_file in json_files:
+            d=parse_json(json_file)
+            defects=extract_tipos_defecto(d)
+            defects=set(defects)   
+            tipos_defecto = tipos_defecto.union(defects)
+       
+        tipos_defecto=list(tipos_defecto)
+        tipos_defecto.sort()
+        print('Tipos Defecto de JSONS:', tipos_defecto)
+    else:
+        tipos_defecto=defect_types
+        print('Tipos de Defecto por configuracion:', tipos_defecto)
+    
+    out=[]
+    for jsonfile in json_files:
+            
+        d=parse_json(jsonfile)
+        onehot_fruit=extract_one_hot(d,tipos_defecto)
+
+        onehotviews=extract_one_hot_views(d,tipos_defecto)
+        if onehotviews is not None and use_views_annotations:
+            #print("Using views annotations for ",os.path.basename(jsonfile))
+            onehot=onehotviews
+        else:
+            onehot=onehot_fruit
+        fruitid=fruit_id_MIL(jsonfile)
+
+        nombre_img=jsonfile.replace('.json',terminacion)
+               
+        if in_memory:
+
+            if "cimg" in terminacion:
+                #Aqui channel_list es una lista de enteros
+                vistas = pycimg.cimglistread_torch(nombre_img,maxvalue,channel_list=channel_list) # lista de tensores normalizados en intensidad 
+            elif "npz" in terminacion:
+                #Aqui channel_list es una lista de strings
+                vistas = pycimg.npzread_torch(nombre_img,jsonfile,channel_list=channel_list)
+            else:
+                vistas=None
+                print(f"ERROR en genera_ds_jsons_multilabelMIL: terminacion '{terminacion}' no reconocida")
+                sys.exit(1)
+        else:
+            vistas=None
+        
+        # Si se emplean anotaciones de vistas onehot sera una matriz de dos dimensiones
+        # Si solo hay una vista sera de 1 x num_defectos
+        imags_folder=os.path.dirname(jsonfile)
+        dict_fruto={'fruit_id':fruitid, 'image': vistas, 'labels': onehot, 'labels_fruit': onehot_fruit,
+                     'imag_folder': imags_folder,  'json_file_full_path': jsonfile,'image_file_full_path':nombre_img,'sufijos':terminacion,
+                     'max_value':maxvalue, 'channel_list':channel_list}
+        out.append(dict_fruto)     
+            
+    
+    return out,tipos_defecto
+        
+
+
 
 # ===================================== NORMALIZACION ==================
 # 
@@ -1071,6 +1141,184 @@ class DirectoryDataModule(pl.LightningDataModule):
     # def predict_dataloader(self):
     #     print("batch_size in predict data loader", self.batch_size)
     #     return DataLoader(self.val_dataset , batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=my_collate_fn)
+
+
+
+
+## Cuando las vistas de un fruto están almacenadas en CIMGLists o npz y las anotaciones en JSONS 
+class JSONSCImgDataModuleSingleLists(pl.LightningDataModule):
+    def __init__(self, 
+
+                train_list=None,
+                val_list=None,
+                pred_dataplaces=None,                
+                batch_size=5,
+                num_workers = -1,
+                defect_types = None,
+                maxvalue=255,
+                normalization_means=None, #if none calculate from training data
+                normalization_stds=None,
+                in_memory=True,
+                imagesize=(112,112),
+                crop_size=None,
+                channel_list=[0,1,2],
+                augmentation=None,
+                terminacion='.npz',
+                use_views_annotations=True,
+                  **kwargs):
+        super().__init__()
+
+        assert augmentation is not None    
+        self.batch_size = batch_size
+
+        self.num_workers = num_workers if num_workers >= 0 else multiprocessing.cpu_count()-1
+        
+        self.tipos_defecto=defect_types,
+        
+        self.medias_norm = normalization_means
+        self.stds_norm = normalization_stds
+        self.target_image_size =imagesize
+        self.train_list=train_list
+        self.val_list=val_list
+        self.pred_dataplaces=pred_dataplaces
+        
+        self.imagesize=imagesize
+        self.training_size=imagesize
+        self.channel_list=channel_list
+        self.augmentation = augmentation
+        self.crop_size=crop_size
+        
+        self.trainset =None
+        self.valset = None
+        self.maxvalue=maxvalue
+        self.terminacion=terminacion
+        self.use_views_annotations=use_views_annotations
+        if self.train_list is not None:
+            self.trainset,self.tipos_defecto=genera_ds_jsons_multilabelMIL_lista(self.train_list ,                                                                
+                                                                                    maxvalue=maxvalue,
+                                                                                    defect_types=defect_types,
+                                                                                    in_memory=in_memory,
+                                                                                    channel_list=self.channel_list,
+                                                                                    terminacion=terminacion,use_views_annotations=use_views_annotations)
+ 
+        if self.val_list is not None:
+            self.valset,self.tipos_defecto=genera_ds_jsons_multilabelMIL_lista(self.val_list,
+                                                                                    maxvalue=maxvalue,
+                                                                                    defect_types=defect_types,in_memory=in_memory,
+                                                                                    channel_list=self.channel_list,
+                                                                                    terminacion=terminacion,
+                                                                                    use_views_annotations=use_views_annotations)
+        self.numlabels=len(self.tipos_defecto)           
+
+
+        train_dataset_medias=CImgListDataSet(dataset=self.trainset,transform=transforms.Resize(self.training_size),channel_list=self.channel_list,terminacion=self.terminacion)  
+        
+
+            
+        if self.medias_norm is None or self.stds_norm is None:
+            print('\n *** INFO: Estimando medias y varianzas normalizacion')
+            self.medias_norm,self.stds_norm=calcula_media_y_stds_MIL(train_dataset_medias)
+            print('     ** Estimated medias_norm:', self.medias_norm)
+            print('     ** Estimated stds_norm:', self.stds_norm)
+            
+
+        transform_normalize=transforms.Compose([transforms.Normalize(self.medias_norm, self.stds_norm) ])
+            
+        augmentation=self.augmentation
+        if self.crop_size is not None:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
+            transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)
+            ])
+        else:
+            transform_geometry= transforms.Compose([   
+            transforms.RandomHorizontalFlip(0.5),
+            transforms.RandomVerticalFlip(0.5),
+            transforms.RandomRotation(augmentation['random_rotation']),
+            transforms.RandomAffine(degrees=augmentation['affine']['degrees'], shear=augmentation['affine']['shear'], 
+                                    scale=augmentation['affine']['scale'],translate=augmentation['affine']['translate']
+                                    ),
+            transforms.Resize(self.training_size)
+            ])
+
+
+
+        transform_intensity_rgb= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'], hue=augmentation['hue'],contrast=augmentation['contrast'],saturation=augmentation['contrast'])            
+            ])
+        transform_intensity= transforms.Compose([
+            transforms.ColorJitter(brightness=augmentation['brightness'],contrast=augmentation['contrast'])            
+            ])
+    
+
+        transform_train=Aumentador_Imagenes(transform_geometry,
+                                                    transform_intensity_rgb,transform_intensity,transform_normalize)
+        
+        if self.crop_size is not None:             
+            tamanyo=transforms.Compose([
+            transforms.CenterCrop(self.crop_size),
+            transforms.Resize(self.training_size)])
+
+            transform_val = Aumentador_Imagenes(tamanyo,                                                
+                                                    None,None,transform_normalize)            
+        else:
+            transform_val = Aumentador_Imagenes(transforms.Resize(self.training_size),
+                                                    None,None,transform_normalize)
+        
+        if defect_types is None:
+            print(f"JSONSCImgDataModule tipos defecto desde JSONS: {self.tipos_defecto}")
+        else:
+            print(f"JSONSCImgDataModule tipos defecto desde configuración: {self.tipos_defecto}")
+            
+
+        if self.train_list is not None:
+                self.train_dataset=CImgListDataSet(dataset=self.trainset,transform=transform_train,channel_list=self.channel_list,terminacion=self.terminacion)        
+        if self.val_list is not None:            
+            self.val_dataset=CImgListDataSet(dataset=self.valset,transform=transform_val,channel_list=self.channel_list,terminacion=self.terminacion)
+            
+
+
+            
+        print(f"JSONSCImgDataModule num labels = {self.numlabels}")
+        if self.train_list is not None:
+            print(f"JSONSCImgDataModule len total trainset =   {len(self.trainset )}")
+        if self.val_list is not None:
+            print(f"JSONSCImgDataModule len total valset =   {len(self.valset )}")
+            
+            
+
+       
+
+        print("batch_size in JSONSCImgDataModule ", self.batch_size)
+        
+
+    def prepare_data(self):
+        pass
+
+    def setup(self, stage=None):
+        return None
+    
+     
+    def train_dataloader(self):
+        print("batch_size in Dataloader train", self.batch_size)
+        misampler=sampler.Balanced_BatchSamplerMultiLabel(self.train_dataset,self.tipos_defecto)   
+        #return DataLoader(self.train_dataset, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, collate_fn=my_collate_fn)
+        return DataLoader(self.train_dataset, batch_size=self.batch_size, sampler=misampler, num_workers=self.num_workers, collate_fn=my_collate_fn_MIL)
+
+    def val_dataloader(self):
+        print("batch_size in Dataloader val", self.batch_size)
+        return DataLoader(self.val_dataset, batch_size=self.batch_size, num_workers=self.num_workers, drop_last=False,shuffle=False, collate_fn=my_collate_fn_MIL)
+    # def predict_dataloader(self):
+    #     print("batch_size in predict data loader", self.batch_size)
+    #     return DataLoader(self.val_dataset , batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers, collate_fn=my_collate_fn)
+
+
 
 
 
