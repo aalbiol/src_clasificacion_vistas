@@ -313,7 +313,9 @@ if __name__ == "__main__":
     for caso in tqdm(dataset):
         #image=caso['image']
         targets_fruit=caso['labels_fruit']
+        
         fruit_id=caso['fruit_id']
+        #print(fruit_id,"Targets_fruit:",targets_fruit)
         #view_id=caso['view_id']
         imags_folder=caso['imag_folder']
         json_file=caso['json_file_full_path']
