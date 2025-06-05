@@ -183,16 +183,16 @@ class ResNetPatchMIL(nn.Module):
         f=self.features(y)
         f=self.dropout(f)
         return self.classifier(f)
-    @torch.jit.export
-    def forward_classification(self,x):
-        y = self.forward(x)
-        maximo, pos_maximo = torch.max(y,dim=-1)
-        maximo, pos_maximo = torch.max(maximo,dim=-1)
-        return maximo
+    # @torch.jit.export
+    # def forward_classification(self,x):
+    #     y = self.forward(x)
+    #     maximo, pos_maximo = torch.max(y,dim=-1)
+    #     maximo, pos_maximo = torch.max(maximo,dim=-1)
+    #     return maximo
     
-    @torch.jit.export
-    def forward_mask(self,x):
-        return self.forward(x)
+    # @torch.jit.export
+    # def forward_mask(self,x):
+    #     return self.forward(x)
     
 
 
