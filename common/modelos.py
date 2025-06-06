@@ -228,14 +228,27 @@ def focal_loss_binary_with_logits(logits, labels, alpha=0.25, gamma=2.0):
     #print("Gamma focal:",gamma)
     # print('logits_device:',logits.device) 
     # print('labels_device:',labels.device) 
-    probs = torch.sigmoid(logits)
-    labels = labels.float()
 
-    pt = torch.where(labels > 0.5 , probs, 1 - probs)
-    at = torch.where(labels > 0.5 , torch.tensor(alpha).to(logits.device), torch.tensor(1 - alpha).to(logits.device))
+    partial_losses=[]
+    nbatch, nclasses = logits.shape
 
-    ce_loss = F.binary_cross_entropy_with_logits(logits, labels, reduction='none')
-    focal_loss = at * (1 - pt).pow(gamma) * ce_loss
-    #print(at)
-    #print(ce_loss)
-    return 10.0*torch.mean(focal_loss)
+    for i in range(nclasses):
+        logits_i = logits[:, i]
+        labels_i = labels[:, i]
+        notnan_mask = torch.logical_not(torch.isnan(labels_i))
+        if notnan_mask.sum() == 0:
+            continue
+        logits_i = logits_i[notnan_mask]
+        labels_i = labels_i[notnan_mask]
+        probs_i = torch.sigmoid(logits_i)
+        labels_i = labels_i.float()
+
+        pt = torch.where(labels_i > 0.5 , probs_i, 1 - probs_i)
+        at = torch.where(labels_i > 0.5 , torch.tensor(alpha).to(logits.device), torch.tensor(1 - alpha).to(logits.device))
+
+        ce_loss = F.binary_cross_entropy_with_logits(logits_i, labels_i, reduction='none')
+        focal_loss = at * (1 - pt).pow(gamma) * ce_loss
+        focal_loss = focal_loss.mean()
+        partial_losses.append(focal_loss)
+    #print("Partial losses:",partial_losses)
+    return 10.0*torch.mean(torch.stack(partial_losses))  # Multiplicamos por 10 para que sea mas grande el valor de la loss y se entrene mejor

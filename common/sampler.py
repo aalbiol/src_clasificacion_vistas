@@ -40,11 +40,20 @@ def get_class_items(matriz_casos,clase):
 
     if clase >=0:
         indices=torch.argwhere(matriz_casos[:,clase])
+        indices=[x.item() for x in indices] # Lista de enteros
     else:
-        suma=torch.sum(matriz_casos,axis=1)
-        indices=torch.argwhere(suma==0)   #tensor
+        nf,nc=matriz_casos.shape
+        indices=[]
+        for i in range(nf):
+            fila=matriz_casos[i,:]
+            not_nan_mask = torch.logical_not(torch.isnan(fila))
+            fila_valid=fila[not_nan_mask]
+            suma=torch.sum(fila_valid)
+            if suma==0:
+                indices.append(i)
+
     
-    indices=[x.item() for x in indices] # Lista de enteros
+    
     return indices
 
 def get_class_distribution(matriz_casos):

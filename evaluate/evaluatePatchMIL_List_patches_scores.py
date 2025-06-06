@@ -34,7 +34,9 @@ import multiprocessing
 import base64
 from PIL import Image
 import io
-
+import matplotlib.pyplot as plt
+import numpy as np
+import json
 from tqdm import tqdm
 from pl_datamodule import ViewDataModule, my_collate_fn
 
@@ -57,6 +59,48 @@ def tensor_to_serializable(obj):
     if isinstance(obj, torch.Tensor):  # Si es un tensor de PyTorch
         return obj.tolist()  # Convierte a lista
     raise TypeError(f"Objeto de tipo {type(obj).__name__} no es serializable.")
+
+def show_patches_tensor(patches_tensor,views_tensor,defectos):
+    """
+    Muestra un número específico de parches de un tensor de parches.
+    """
+    # Asegúrate de que el tensor tenga la forma correcta
+    if patches_tensor.ndim != 4:
+        raise ValueError("El tensor debe tener 4 dimensiones (batch_size, channels, height, width).")
+
+    patches_tensor=patches_tensor.cpu().numpy()
+    nviews,ndefectos,h,w=patches_tensor.shape
+
+    if ndefectos != len(defectos):
+        raise ValueError("El tensor tiene que tener el mismo numero de canales que tamaño la lista de defectos")
+    
+    fig, axes = plt.subplots(nrows=nviews, ncols=ndefectos+1, figsize=(24, 15)) # Ajusta figsize según sea necesario
+
+
+    
+    for j in range(nviews):
+        im=views_tensor[j][:,:,:3]
+        ax = axes[j, 0]
+        ax.imshow(im ) # Puedes cambiar el mapa de colores (cmap)
+        ax.axis('off')  # Desactivar los ejes para una vista más limpia
+        for i in range(ndefectos):
+            # Seleccionar la sub-matriz de 7x7
+            image_7x7 = patches_tensor[j, i, :, :]
+
+            # Visualizar la imagen en el subplot correspondiente
+            ax = axes[j, 1+i]
+            ax.imshow(image_7x7, cmap='gray',clim=(0,1)) # Puedes cambiar el mapa de colores (cmap)
+                                            # 'gray' es común para datos de una sola canal
+            ax.axis('off')  # Desactivar los ejes para una vista más limpia
+            ax.set_title(f" {j} # {defectos[i][:7]}")  # Título para cada subplot
+
+            
+
+    # Ajustar el diseño para evitar superposiciones
+    plt.tight_layout()
+
+    # Mostrar la figura
+    plt.show()
 
 
 if __name__ == "__main__":
@@ -151,7 +195,7 @@ if __name__ == "__main__":
     dataset,tipos_defecto=pl_datamodule.genera_ds_jsons_multilabelMIL_lista(train_list_name ,                                                                
                                                                                     maxvalue=maxvalues,
                                                                                     defect_types=tipos_defecto,
-                                                                                    in_memory=in_memory,
+                                                                                    in_memory=False,
                                                                                     channel_list=model.channel_list,
                                                                                     terminacion=terminaciones)
 
@@ -159,22 +203,32 @@ if __name__ == "__main__":
     class_results=[]
 
 
-    for caso in tqdm(dataset):
+    for caso in dataset:
+
         #image=caso['image']
         targets=caso['labels']
         fruit_id=caso['fruit_id']
+        print(f"=================  {fruit_id} ====================================")        
         #view_id=caso['view_id']
         imags_folder=caso['imag_folder']
         json_file=caso['json_file_full_path']
         #   print("Main Json file:",json_file)
         #view_id=os.path.join(imags_folder,view_id)
         nombre_cimg=caso['image_file_full_path']
-        results=model.predict(nombre_cimg,device,include_images=False,json_file=json_file)
+        results=model.predict(nombre_cimg,device,include_images=True,json_file=json_file)
 
         result= results[0] #introducimos los frutos de 1 en 1
         #print("Result:",result) 
         #results=model.predict(image,device)
         tensor_probs=torch.tensor(result['probs_fruto_tensor'])
+        patches_scores=result['probs_patches_tensor']
+        views_scores=result['probs_vistas_tensor']
+        imags=result['img']
+        # print("Patches scores:",patches_scores.shape)
+        # print("Views scores:",views_scores)
+        views_scores=views_scores.cpu().numpy()
+
+        
         preds_train.append(tensor_probs)
 
 
@@ -190,13 +244,17 @@ if __name__ == "__main__":
         
         targets_train.append(targets_fruit.unsqueeze(dim=0))
         targets_fruit_dict={}
+        targets_fruit_dict2={}
         for nclase in range(len(tipos_defecto)):
-            kk=targets_fruit[nclase]
-            if torch.isnan(kk):
-                kk=0
-            else:
-                kk=int(kk.item())
-            targets_fruit_dict[tipos_defecto[nclase]]=kk
+            targets_fruit_dict[tipos_defecto[nclase]]=int(targets_fruit[nclase].item())
+            targets_fruit_dict2[nclase]=(tipos_defecto[nclase],int(tensor_probs[nclase].item()))
+            kkk=int(targets_fruit[nclase].item())
+            if kkk:
+                print(f"{nclase}: {tipos_defecto[nclase]} -> {kkk}")
+        
+        #_=plt.imshow(views_scores,cmap='gray',clim=(0,1))
+        #_=plt.show()
+        show_patches_tensor(patches_scores,imags,tipos_defecto)
         a_guardar={'filename': result['imgname'],
                             'scores':result['probs_fruto'],
                             'ground_truth': targets_fruit_dict,
@@ -272,12 +330,7 @@ if __name__ == "__main__":
         
         targets_fruit_dict={}
         for nclase in range(len(tipos_defecto)):
-            kk=targets_fruit[nclase]
-            if torch.isnan(kk):
-                kk=0
-            else:
-                kk=int(kk.item())
-            targets_fruit_dict[tipos_defecto[nclase]]=kk
+            targets_fruit_dict[tipos_defecto[nclase]]=int(targets_fruit[nclase].item())
         a_guardar={'filename': result['imgname'],
                             'scores':result['probs_fruto'],
                             'ground_truth': targets_fruit_dict,
@@ -345,15 +398,7 @@ if __name__ == "__main__":
         
         targets_fruit_dict={}
         for nclase in range(len(tipos_defecto)):
-            aanot= targets_fruit[nclase]
-            if torch.isnan(aanot):
-                aanot=0
-                print("Nan en clase:",tipos_defecto[nclase],json_file)
-            else:
-                aanot=int(aanot.item())
-                if aanot not in [0,1]:
-                    print("Valor no esperado en clase:",tipos_defecto[nclase],json_file,aanot)
-            targets_fruit_dict[tipos_defecto[nclase]]=aanot
+            targets_fruit_dict[tipos_defecto[nclase]]=int(targets_fruit[nclase].item())
         a_guardar={'filename': result['imgname'],
                             'scores':result['probs_fruto'],
                             'ground_truth': targets_fruit_dict,
@@ -386,17 +431,13 @@ if __name__ == "__main__":
     print("  ******************** AUCs *************************")
     print("====================================================================")
     
-    preds_val = torch.stack(preds_val).cpu()
-    targets_val = torch.concat(targets_val).cpu()
-    preds_test = torch.stack(preds_test).cpu()
-    targets_test = torch.stack(targets_test).cpu()
-    preds_train = preds_train.cpu()
-    targets_train = targets_train.cpu()
-
+    preds_val = torch.stack(preds_val)
+    targets_val = torch.concat(targets_val)
+    preds_test = torch.stack(preds_test)
+    targets_test = torch.stack(targets_test)    
     aucs_train=calculate_auc_multilabel(preds_train.cpu(),targets_train.cpu(),tipos_defecto)       
     aucs_val=calculate_auc_multilabel(preds_val.cpu(),targets_val.cpu(),tipos_defecto)
     aucs_test=calculate_auc_multilabel(preds_test.cpu(),targets_test.cpu(),tipos_defecto)
-
 
     
     aucdata={'Train AUCs':aucs_train,

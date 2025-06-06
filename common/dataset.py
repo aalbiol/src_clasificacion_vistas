@@ -122,6 +122,7 @@ class CImgListDataSet(Dataset):
         self.transform = transform
         self.channel_list=channel_list
         self.terminacion=terminacion
+        self.have_warned_about_nans_in_dataset = False
         
 
         
@@ -135,8 +136,11 @@ class CImgListDataSet(Dataset):
         imags_folder=caso['imag_folder']
         maxvalue=caso['max_value']
         
-        if target.isnan().sum() >0:
-            print("\n\n******Imagen ", fruit_id, "labels:",target )
+        if self.have_warned_about_nans_in_dataset == False:
+            if target.isnan().sum() >0:
+                print("\n\n******Imagen ", fruit_id, "labels:",target )
+                self.have_warned_about_nans_in_dataset = True
+                
         if vistas is None: #Cuando no está en memoria
             nombre_img=os.path.join(imags_folder,fruit_id)
             nombre_img += self.terminacion

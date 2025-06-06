@@ -159,11 +159,7 @@ class PatchMILClassifier(pl.LightningModule):
     def criterion(self, logits, labels): 
         
         # Gamma del focal loss va disminuyendo a medida que avanza el entrenamiento gamma annealing
-        num_epochs=self.config['train']['epochs'] 
-        num_epochs23=num_epochs*2/3
-        
-        gamma=self.focal_loss_gamma*(1-(self.epoch_counter-1)/num_epochs23)
-        gamma=max(gamma,0)
+ 
         gamma=self.focal_loss_gamma
 
         if self.focal_loss_alpha is not None:
@@ -171,44 +167,35 @@ class PatchMILClassifier(pl.LightningModule):
             # print("Logits:",logits)
             # print("Labels:",labels)
             #print("Focal Loss:",loss)
-            return loss,loss,loss                         
-        binaryLoss = nn.BCEWithLogitsLoss(reduction='none')
+            if torch.isnan(loss):            
+                print ('\nNAN Loss Logits:',logits, " labels:", labels, 'epoch:', self.epoch_counter)
+                print("NAN Losses:",loss)
+            return loss                         
+        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
         #binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
         # print('logit.shape:',logits.shape)
         # print('smoothed_labels.shape:',smoothed_labels.shape)
         #   print(">>>>>>>>>>>>smoothed labels:", smoothed_labels)
-        losses=binaryLoss(logits,labels)
+        notnan_mask = torch.logical_not(torch.isnan(labels))
+        loss=binaryLoss(logits[notnan_mask],labels[notnan_mask])
         
-        losses_cols=[]
-        pos_losses_col=[]
-        neg_losses_col=[]
-        for col in range(labels.shape[1]):
-            labels_col=labels[:,col]
-            losses_col=losses[:,col]
-            pos_loss_col=losses_col[labels_col>0.5].mean()
-            neg_loss_col=losses_col[labels_col<0.5].mean()
-            pos_losses_col.append(pos_loss_col)
-            neg_losses_col.append(neg_loss_col)
-            loss_col=(pos_loss_col+neg_loss_col)/2
-            losses_cols.append(loss_col)
-        loss=torch.stack(losses_cols).mean()
-        loss_pos=torch.stack(pos_losses_col).mean()
-        loss_neg=torch.stack(neg_losses_col).mean()
+
         
         
         
         if torch.isnan(loss):            
             print ('\nNAN Loss Logits:',logits, " labels:", labels, 'epoch:', self.epoch_counter)
-            print("NAN Losses:",loss,losses_cols)
-        return loss,loss_pos,loss_neg
-    
-    def criterionval(self, logits, labels):  
-        if self.focal_loss_alpha is not None:
-            loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=self.focal_loss_gamma)
-            return loss                                   
-        binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
-        loss=binaryLoss(logits,labels)
+            print("NAN Losses:",loss)
         return loss
+    
+    # def criterionval(self, logits, labels):  
+    #     if self.focal_loss_alpha is not None:
+    #         loss=modelos.focal_loss_binary_with_logits(logits,labels,alpha=self.focal_loss_alpha,gamma=self.focal_loss_gamma)
+    #         return loss                                   
+    #     binaryLoss = nn.BCEWithLogitsLoss(reduction='mean')
+    #     notnan_mask = torch.logical_not(torch.isnan(labels))
+    #     loss=binaryLoss(logits[notnan_mask],labels[notnan_mask])
+    #     return loss
     
 
 
@@ -328,7 +315,8 @@ class PatchMILClassifier(pl.LightningModule):
         logits_patches,logits_view,logits_fruit = self.forward(images,nviews)
         
         #loss,pos_loss,neg_loss = self.criterion_patches(logits_patches, labels,nviews) 
-        loss,pos_loss,neg_loss = self.criterion(logits_fruit, labels)
+        loss = self.criterion(logits_fruit, labels)
+        
         if loss==0:
             print("*** WARNNG Training Zero Loss. Labels= ",labels)
             if images.isnan().any():
@@ -337,7 +325,7 @@ class PatchMILClassifier(pl.LightningModule):
                 print("No hay Nans en imagen")
         
         # perform logging
-        log_dict = {'train_loss': loss, 'pos_loss':pos_loss, 'neg_loss':neg_loss}
+        log_dict = {'train_loss': loss}
         self.log_dict(log_dict, on_step=False, on_epoch=True, prog_bar=True, logger=True)
         
         return loss
@@ -350,7 +338,7 @@ class PatchMILClassifier(pl.LightningModule):
         nviews = batch['nviews']
         
         logits_patches,logits_view,logits_fruit = self.forward(images,nviews=nviews) # mapas de logits [b,c,11,11]
-        loss = self.criterionval(logits_fruit, labels)
+        loss = self.criterion(logits_fruit, labels)
         #loss,pos_loss,neg_loss = self.criterion_patches(logits_patches, labels,nviews)
         
         preds=F.sigmoid(logits_fruit)
@@ -362,7 +350,8 @@ class PatchMILClassifier(pl.LightningModule):
             self.valpreds=torch.cat((self.valpreds,preds))
             self.valtargets = torch.cat((self.valtargets,labels))
                     
-        self.log("val_loss", loss, on_step=False, on_epoch=True, prog_bar=True, logger=True)
+        log_dict = {'val_loss': loss}
+        self.log_dict(log_dict, on_step=False, on_epoch=True, prog_bar=True, logger=True)
 
 
     # def predict_step(self, batch, batch_idx, dataloader_idx=0):    
